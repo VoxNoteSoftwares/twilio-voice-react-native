@@ -403,6 +403,7 @@ export class CallInvite extends EventEmitter {
       sid: callInvite.callSid,
       from: callInvite.from,
       to: callInvite.to,
+      iceGenerationId: callInvite.iceGenerationId,
     };
 
     const call = new Call(callInfo);

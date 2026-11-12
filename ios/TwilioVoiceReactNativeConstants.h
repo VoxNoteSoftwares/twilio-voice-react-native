@@ -41,6 +41,7 @@ static NSString * const kTwilioVoiceReactNativeCallInfoIsMuted = @"isMuted";
 static NSString * const kTwilioVoiceReactNativeCallInfoIsOnHold = @"isOnHold";
 static NSString * const kTwilioVoiceReactNativeCallInfoState = @"state";
 static NSString * const kTwilioVoiceReactNativeCallInfoInitialConnectedTimestamp = @"initialConnectedTimestamp";
+static NSString * const kTwilioVoiceReactNativeCallInfoIceGenerationId = @"iceGenerationId";
 
 // Call States
 static NSString * const kTwilioVoiceReactNativeCallStateConnected = @"connected";

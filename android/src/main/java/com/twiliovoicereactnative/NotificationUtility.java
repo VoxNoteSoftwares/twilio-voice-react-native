@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.media.AudioAttributes;
 import android.net.Uri;
+import android.telephony.PhoneNumberUtils;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationChannelCompat;
@@ -91,7 +92,7 @@ class NotificationUtility {
         return notificationDisplayName;
       }
 
-      final String to = this.callRecord.getCallRecipient();
+      final String to = formatPhoneNumberForDisplay(this.callRecord.getCallRecipient());
       return this.getContentText().replaceAll("\\$\\{to\\}", to);
     }
 
@@ -110,7 +111,16 @@ class NotificationUtility {
       if (title.startsWith("client:")) {
         return title.replaceFirst("client:", "");
       }
-      return title;
+      return formatPhoneNumberForDisplay(title);
+    }
+
+    // Presentation only: never mutate the CallRecord or the number used to dial.
+    private static String formatPhoneNumberForDisplay(String value) {
+      if (value == null || !value.matches("^\\+[1-9][0-9]{7,14}$")) {
+        return value;
+      }
+      final String formatted = PhoneNumberUtils.formatNumber(value, "ZZ");
+      return formatted == null || formatted.isEmpty() ? value : formatted;
     }
 
     private static String templateDisplayName(final String template, final Map<String, String> twimlParams) {

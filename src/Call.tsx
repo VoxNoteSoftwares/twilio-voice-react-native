@@ -374,6 +374,8 @@ export class Call extends EventEmitter {
    * Initial `connected` timestamp. Milliseconds since epoch.
    */
   private _initialConnectedTimestamp?: Date;
+  /** ICE configuration generation captured when native call options were built. */
+  private _iceGenerationId?: string;
   /**
    * A boolean representing if the call is currently muted.
    */
@@ -433,6 +435,7 @@ export class Call extends EventEmitter {
     isMuted,
     isOnHold,
     initialConnectedTimestamp,
+    iceGenerationId,
   }: NativeCallInfo) {
     super();
 
@@ -447,6 +450,7 @@ export class Call extends EventEmitter {
     this._initialConnectedTimestamp = initialConnectedTimestamp
       ? new Date(initialConnectedTimestamp)
       : undefined;
+    this._iceGenerationId = iceGenerationId;
 
     this._nativeEventHandler = {
       /**
@@ -744,6 +748,11 @@ export class Call extends EventEmitter {
    */
   getInitialConnectedTimestamp(): Date | undefined {
     return this._initialConnectedTimestamp;
+  }
+
+  /** Get the ICE configuration generation used to build this call, when known. */
+  getIceGenerationId(): string | undefined {
+    return this._iceGenerationId;
   }
 
   /**
@@ -1100,6 +1109,10 @@ export namespace Call {
      * Raised when the call detects constant audio input, such as silence.
      */
     'ConstantAudioInputLevel' = 'constant-audio-input-level',
+    /**
+     * Raised when the call detects constant audio output.
+     */
+    'ConstantAudioOutputLevel' = 'constant-audio-output-level',
     /**
      * Raised when the network encounters high jitter.
      */

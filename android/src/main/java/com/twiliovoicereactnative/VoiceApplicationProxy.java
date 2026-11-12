@@ -69,6 +69,10 @@ public class VoiceApplicationProxy {
     logger.debug("onCreate(..) invoked");
     // record the Expo SDK version before anything can emit an insights event
     recordExpoVersion();
+    // VoxNote: load encrypted ICE configuration before the incoming-call service can
+    // accept a notification action, without waiting for React Native startup.
+    IceConfigurationStore.initialize(context);
+    CallAudioOwnershipRegistry.reconcile(context);
     // construct JS event engine
     jsEventEmitter = new JSEventEmitter();
     // construct notification channels

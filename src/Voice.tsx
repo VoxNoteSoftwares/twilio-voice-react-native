@@ -608,6 +608,67 @@ export class Voice extends EventEmitter {
   }
 
   /**
+   * Set ICE servers and transport policy for use by inbound calls.
+   * Should be called after fetching TURN credentials so that
+   * incoming calls can use relay candidates.
+   */
+  async setIceServers(iceServers: IceServer[], iceTransportPolicy?: string): Promise<void> {
+    await settleNativePromise(NativeModule.voice_setIceServers(iceServers, iceTransportPolicy));
+  }
+
+  /**
+   * Persist a generation-stamped ICE configuration for inbound and outbound
+   * native call paths. The transport policy is intentionally left undefined so
+   * the Twilio/WebRTC default (`all`) remains in effect.
+   */
+  async setIceConfiguration(configuration: {
+    generationId: string;
+    iceServers: IceServer[];
+    iceTransportPolicy?: undefined;
+    expiresAt: number;
+  }): Promise<void> {
+    await settleNativePromise(NativeModule.voice_setIceConfiguration(configuration));
+  }
+
+  async getIceConfigurationState(): Promise<{
+    generationId: string | null;
+    serverCount: number;
+    expiresAt: number | null;
+    policy: 'all';
+    isValid: boolean;
+    status: 'none' | 'pending' | 'applied' | 'failed' | 'unsupported';
+    attemptedAt: number | null;
+    appliedAt: number | null;
+    errorCode: string | number | null;
+  }> {
+    return await settleNativePromise(NativeModule.voice_getIceConfigurationState());
+  }
+
+  async clearIceConfiguration(): Promise<void> {
+    await settleNativePromise(NativeModule.voice_clearIceConfiguration());
+  }
+
+  /** Synchronize VoxNote's native process-wide call-audio ownership guard. */
+  async setCallAudioOwnership(owned: boolean): Promise<void> {
+    await settleNativePromise(NativeModule.voice_setCallAudioOwnership(owned));
+  }
+
+  /**
+   * VoxNote: read the current audio capture state (Twilio audio unit enabled flag
+   * plus the AVAudioSession category/mode) so the app can prove whether outbound
+   * audio is actually live on a connected call. iOS only.
+   */
+  async getAudioDeviceState(): Promise<{
+    enabled: boolean;
+    category: string;
+    mode: string;
+    isOtherAudioPlaying: boolean;
+    secondaryAudioShouldBeSilencedHint: boolean;
+  }> {
+    return await settleNativePromise(NativeModule.voice_getAudioDeviceState());
+  }
+
+  /**
    * Get the version of the native SDK. Note that this is not the version of the
    * React Native SDK, this is the version of the mobile SDK that the RN SDK is
    * utilizing.

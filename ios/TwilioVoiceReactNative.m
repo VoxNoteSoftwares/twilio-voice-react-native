@@ -6,6 +6,7 @@
 //
 
 @import AVKit;
+@import Security;
 
 #import "TwilioVoicePushRegistry.h"
 #import "TwilioVoiceReactNative.h"
@@ -25,6 +26,8 @@ NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallInvite = @"cancelle
 NSString * const kTwilioVoiceAudioDeviceUid = @"uid";
 
 static TVODefaultAudioDevice *sTwilioAudioDevice;
+static NSString * const kVoxNoteIceConfigurationKeychainService = @"com.voxnote.twilio.ice-configuration";
+static NSString * const kVoxNoteCallAudioOwnershipKey = @"voxnote_call_audio_owned";
 
 @import TwilioVoice;
 
@@ -82,6 +85,16 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *audioDeviceUuids;
 @property(nonatomic, strong) NSDictionary *selectedAudioDevice;
 @property(nonatomic, assign) BOOL registrationInProgress;
+@property(nonatomic, assign) BOOL deviceTokenWasInvalidated;
+@property(nonatomic, assign) NSUInteger deviceTokenGeneration;
+
+- (void)loadPersistedIceConfiguration;
+- (BOOL)applyIceConfiguration:(NSDictionary *)configuration persist:(BOOL)persist error:(NSError **)error;
+- (BOOL)clearPersistedIceConfiguration:(NSError **)error;
+
+- (void)registerWithAccessToken:(NSString *)accessToken
+                 deviceTokenData:(NSData *)deviceTokenData
+                        resolver:(RCTPromiseResolveBlock)resolver;
 
 @end
 
@@ -100,6 +113,10 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
         _iceServersMap = [NSMutableDictionary dictionary];
         _iceTransportPolicyMap = [NSMutableDictionary dictionary];
         _callPromiseResolvers = [NSMutableDictionary dictionary];
+        _callIceGenerationMap = [NSMutableDictionary dictionary];
+        _iceApplicationStatus = @"none";
+        [self loadPersistedIceConfiguration];
+        [self voxnoteSetCallAudioOwned:NO];
 
         NSString *reactNativeSDK = kTwilioVoiceReactNativeReactNativeVoiceSDK;
         setenv("global-env-sdk", [reactNativeSDK UTF8String], 1);
@@ -126,14 +143,146 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
         TwilioVoiceSDK.logLevel = TVOLogLevelTrace;
 
         [self subscribeToNotifications];
+        [self initializePushRegistry];
         [self initializeCallKit];
         [self initializeAudioDeviceList];
     }
 
-    return self;
+	return self;
+}
+
+- (void)voxnoteSetCallAudioOwned:(BOOL)owned {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setBool:owned forKey:kVoxNoteCallAudioOwnershipKey];
+}
+
+- (void)voxnoteRefreshCallAudioOwnership {
+    [self voxnoteSetCallAudioOwned:(self.callMap.count > 0 || self.callInviteMap.count > 0)];
+}
+
+- (void)loadPersistedIceConfiguration {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kVoxNoteIceConfigurationKeychainService,
+        (__bridge id)kSecReturnData: @YES,
+        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitOne,
+    };
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status != errSecSuccess || result == NULL) return;
+
+    NSData *data = CFBridgingRelease(result);
+    NSDictionary *configuration = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    NSError *error = nil;
+    if (![configuration isKindOfClass:[NSDictionary class]] ||
+        ![self applyIceConfiguration:configuration persist:NO error:&error]) {
+        [self clearPersistedIceConfiguration:nil];
+    }
+}
+
+- (BOOL)applyIceConfiguration:(NSDictionary *)configuration persist:(BOOL)persist error:(NSError **)error {
+    NSString *generationId = configuration[@"generationId"];
+    NSArray *servers = configuration[@"iceServers"];
+    NSNumber *expiresAt = configuration[@"expiresAt"];
+    NSNumber *attemptedAt = @([[NSDate date] timeIntervalSince1970] * 1000.0);
+    self.iceAttemptedAt = attemptedAt;
+
+    BOOL valid = [generationId isKindOfClass:[NSString class]] && generationId.length > 0 &&
+        [servers isKindOfClass:[NSArray class]] && servers.count > 0 &&
+        [expiresAt isKindOfClass:[NSNumber class]] && expiresAt.doubleValue > attemptedAt.doubleValue;
+    if (valid) {
+        for (NSDictionary *server in servers) {
+            if (![server isKindOfClass:[NSDictionary class]] ||
+                ![server[kTwilioVoiceReactNativeIceServerKeyServerUrl] isKindOfClass:[NSString class]] ||
+                [server[kTwilioVoiceReactNativeIceServerKeyServerUrl] length] == 0) {
+                valid = NO;
+                break;
+            }
+        }
+    }
+
+    if (!valid) {
+        self.iceApplicationStatus = @"failed";
+        self.iceApplicationErrorCode = @"invalid_configuration";
+        if (error) {
+            *error = [NSError errorWithDomain:@"TwilioVoiceReactNativeIceConfiguration"
+                                         code:1
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Invalid or expired ICE configuration"}];
+        }
+        return NO;
+    }
+
+    if (persist) {
+        NSDictionary *persisted = @{
+            @"generationId": generationId,
+            @"iceServers": servers,
+            @"expiresAt": expiresAt,
+        };
+        NSData *data = [NSJSONSerialization dataWithJSONObject:persisted options:0 error:error];
+        if (!data) return NO;
+        NSDictionary *query = @{
+            (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+            (__bridge id)kSecAttrService: kVoxNoteIceConfigurationKeychainService,
+        };
+        OSStatus keychainStatus = SecItemUpdate(
+            (__bridge CFDictionaryRef)query,
+            (__bridge CFDictionaryRef)@{(__bridge id)kSecValueData: data}
+        );
+        if (keychainStatus == errSecItemNotFound) {
+            NSDictionary *attributes = @{
+            (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+            (__bridge id)kSecAttrService: kVoxNoteIceConfigurationKeychainService,
+            (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            (__bridge id)kSecValueData: data,
+            };
+            keychainStatus = SecItemAdd((__bridge CFDictionaryRef)attributes, NULL);
+        }
+        if (keychainStatus != errSecSuccess) {
+            self.iceApplicationStatus = @"failed";
+            self.iceApplicationErrorCode = [NSString stringWithFormat:@"keychain_%d", (int)keychainStatus];
+            if (error) {
+                *error = [NSError errorWithDomain:@"TwilioVoiceReactNativeIceConfiguration"
+                                             code:keychainStatus
+                                         userInfo:@{NSLocalizedDescriptionKey: @"Failed to persist ICE configuration"}];
+            }
+            return NO;
+        }
+    }
+
+    self.iceServers = servers;
+    self.iceTransportPolicy = nil;
+    self.iceGenerationId = generationId;
+    self.iceExpiresAt = expiresAt;
+    self.iceAppliedAt = @([[NSDate date] timeIntervalSince1970] * 1000.0);
+    self.iceApplicationStatus = @"applied";
+    self.iceApplicationErrorCode = nil;
+    return YES;
+}
+
+- (BOOL)clearPersistedIceConfiguration:(NSError **)error {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kVoxNoteIceConfigurationKeychainService,
+    };
+    OSStatus status = SecItemDelete((__bridge CFDictionaryRef)query);
+    if (status == errSecSuccess || status == errSecItemNotFound) {
+        return YES;
+    }
+    self.iceApplicationStatus = @"failed";
+    self.iceApplicationErrorCode = [NSString stringWithFormat:@"keychain_delete_%d", (int)status];
+    if (error) {
+        *error = [NSError errorWithDomain:@"TwilioVoiceReactNativeIceConfiguration"
+                                     code:status
+                                 userInfo:@{NSLocalizedDescriptionKey: @"Failed to clear persisted ICE configuration"}];
+    }
+    return NO;
 }
 
 - (void)initializePushRegistry {
+    if (self.twilioVoicePushRegistry != nil) {
+        return;
+    }
+
     self.twilioVoicePushRegistry = [TwilioVoicePushRegistry new];
     [self.twilioVoicePushRegistry updatePushRegistry];
 }
@@ -158,9 +307,37 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
     NSMutableDictionary *eventBody = [notification.userInfo mutableCopy];
     NSString *type = eventBody[kTwilioVoiceReactNativeVoiceEventType];
     if ([type isEqualToString:kTwilioVoicePushRegistryNotificationDeviceTokenUpdated]) {
-        self.deviceTokenData = eventBody[kTwilioVoicePushRegistryNotificationDeviceToken];
+        NSData *updatedDeviceTokenData = eventBody[kTwilioVoicePushRegistryNotificationDeviceToken];
+        BOOL recoveringFromInvalidation = self.deviceTokenWasInvalidated;
+        BOOL tokenChanged = self.deviceTokenData != nil && ![self.deviceTokenData isEqualToData:updatedDeviceTokenData];
+        BOOL credentialsChanged = tokenChanged || recoveringFromInvalidation;
+        if (credentialsChanged) {
+            self.deviceTokenGeneration += 1;
+        }
+        self.deviceTokenData = updatedDeviceTokenData;
+        self.deviceTokenWasInvalidated = NO;
+
+        if (credentialsChanged && [self.accessToken length] > 0) {
+            if (self.registrationInProgress) {
+                NSLog(@"[TwilioVoiceReactNative] VoIP token changed or recovered while registration is already in progress; the stale attempt will refresh.");
+            } else {
+                NSLog(@"[TwilioVoiceReactNative] VoIP token changed or recovered; refreshing Twilio registration.");
+                [self registerWithAccessToken:self.accessToken
+                              deviceTokenData:updatedDeviceTokenData
+                                     resolver:nil];
+            }
+        }
 
         // Skip the event emitting since 1, the listener has not registered and 2, the app does not need to know about this
+        return;
+    } else if ([type isEqualToString:kTwilioVoicePushRegistryNotificationDeviceTokenInvalidated]) {
+        self.deviceTokenGeneration += 1;
+        self.deviceTokenData = nil;
+        self.deviceTokenWasInvalidated = YES;
+
+        NSLog(@"[TwilioVoiceReactNative] VoIP token invalidated; cached token cleared while awaiting replacement credentials.");
+        [self sendEventWithName:kTwilioVoiceReactNativeScopeVoice
+                           body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeVoiceEventUnregistered}];
         return;
     } else if ([type isEqualToString:kTwilioVoicePushRegistryNotificationIncomingPushReceived]) {
         NSDictionary *payload = eventBody[kTwilioVoicePushRegistryNotificationIncomingPushPayload];
@@ -173,23 +350,30 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
 }
 
 - (void)handleRouteChange:(NSNotification *)notification {
-    [self availableAudioDevices];
+    // Dispatch to a background queue to avoid blocking the main thread.
+    // AVAudioSession.availableInputs can trigger a synchronous XPC call
+    // that hangs the main thread for 2+ seconds.
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self availableAudioDevices];
 
-    NSMutableArray *nativeAudioDeviceInfos = [NSMutableArray array];
-    for (NSString *key in [self.audioDevices allKeys]) {
-        [nativeAudioDeviceInfos addObject:self.audioDevices[key]];
-    }
+        NSMutableArray *nativeAudioDeviceInfos = [NSMutableArray array];
+        for (NSString *key in [self.audioDevices allKeys]) {
+            [nativeAudioDeviceInfos addObject:self.audioDevices[key]];
+        }
 
-    NSMutableDictionary *eventBody = [@{
-        kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeVoiceEventAudioDevicesUpdated,
-        kTwilioVoiceReactNativeAudioDeviceKeyAudioDevices: nativeAudioDeviceInfos
-    } mutableCopy];
+        NSMutableDictionary *eventBody = [@{
+            kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeVoiceEventAudioDevicesUpdated,
+            kTwilioVoiceReactNativeAudioDeviceKeyAudioDevices: nativeAudioDeviceInfos
+        } mutableCopy];
 
-    if (self.selectedAudioDevice != nil) {
-        eventBody[kTwilioVoiceReactNativeAudioDeviceKeySelectedDevice] = self.selectedAudioDevice;
-    }
+        if (self.selectedAudioDevice != nil) {
+            eventBody[kTwilioVoiceReactNativeAudioDeviceKeySelectedDevice] = self.selectedAudioDevice;
+        }
 
-    [self sendEventWithName:kTwilioVoiceReactNativeScopeVoice body:eventBody];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self sendEventWithName:kTwilioVoiceReactNativeScopeVoice body:eventBody];
+        });
+    });
 }
 
 /**
@@ -434,6 +618,11 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
         callInfo[kTwilioVoiceReactNativeCallInfoInitialConnectedTimestamp] = initialConnectedTimestamp;
     }
 
+    NSString *iceGenerationId = self.callIceGenerationMap[call.uuid.UUIDString];
+    if (iceGenerationId != nil) {
+        callInfo[kTwilioVoiceReactNativeCallInfoIceGenerationId] = iceGenerationId;
+    }
+
     TVOCallInvite *callInvite = self.callInviteMap[call.uuid.UUIDString];
     if (callInvite && callInvite.customParameters) {
         callInfo[kTwilioVoiceReactNativeCallInviteInfoCustomParameters] = [callInvite.customParameters copy];
@@ -453,6 +642,11 @@ static TVODefaultAudioDevice *sTwilioAudioDevice;
 
     if (callInvite.customParameters != nil) {
         callInviteInfo[kTwilioVoiceReactNativeCallInviteInfoCustomParameters] = [callInvite.customParameters copy];
+    }
+
+    NSString *iceGenerationId = self.callIceGenerationMap[callInvite.uuid.UUIDString];
+    if (iceGenerationId != nil) {
+        callInviteInfo[kTwilioVoiceReactNativeCallInfoIceGenerationId] = iceGenerationId;
     }
 
     return callInviteInfo;
@@ -515,6 +709,35 @@ RCT_EXPORT_METHOD(voice_getVersion:(RCTPromiseResolveBlock)resolver
     [self resolvePromise:resolver value:TwilioVoiceSDK.sdkVersion];
 }
 
+// VoxNote patch: read-only probe of the audio capture state at call time, so JS can
+// emit a Sentry event and prove whether the audio unit is actually running on a
+// connected call. See tasks/silent-call-fix-spec.md (PR 3 instrumentation).
+RCT_EXPORT_METHOD(voice_getAudioDeviceState:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)rejecter)
+{
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    TVODefaultAudioDevice *device = [TwilioVoiceReactNative twilioAudioDevice];
+    [self resolvePromise:resolver value:@{
+        @"enabled": @(device.enabled),
+        @"category": session.category ?: @"",
+        @"mode": session.mode ?: @"",
+        @"isOtherAudioPlaying": @(session.isOtherAudioPlaying),
+        @"secondaryAudioShouldBeSilencedHint": @(session.secondaryAudioShouldBeSilencedHint)
+    }];
+}
+
+RCT_EXPORT_METHOD(voice_setCallAudioOwnership:(BOOL)owned
+                  resolver:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)rejecter)
+{
+    if (owned) {
+        [self voxnoteSetCallAudioOwned:YES];
+    } else {
+        [self voxnoteRefreshCallAudioOwnership];
+    }
+    [self resolvePromise:resolver value:[NSNull null]];
+}
+
 RCT_EXPORT_METHOD(voice_getDeviceToken:(RCTPromiseResolveBlock)resolver
                   rejecter:(RCTPromiseRejectBlock)rejecter)
 {
@@ -568,39 +791,81 @@ RCT_EXPORT_METHOD(voice_register:(NSString *)accessToken
     [self asyncPushRegistryInitialization:kPushRegistryDeviceTokenRetryTimeout
                                completion:^(NSData *deviceTokenData) {
         if (deviceTokenData) {
-            [TwilioVoiceSDK registerWithAccessToken:accessToken
-                                        deviceToken:deviceTokenData
-                                         completion:^(NSError *error) {
-                self.registrationInProgress = NO;
-                if (error) {
-                    NSString *errorMessage = [error localizedDescription];
-                    NSNumber *errorCode = @(error.code);
-                    
-                    NSDictionary *payload = @{
-                        kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeVoiceEventError,
-                        kTwilioVoiceReactNativeVoiceErrorKeyError: @{
-                            kTwilioVoiceReactNativeVoiceErrorKeyCode: errorCode,
-                            kTwilioVoiceReactNativeVoiceErrorKeyMessage: errorMessage
-                        }
-                    };
-                    [self sendEventWithName:kTwilioVoiceReactNativeScopeVoice body:payload];
-                    
-                    [self rejectPromiseWithCode:resolver code:errorCode message:errorMessage];
-                } else {
-                    NSDictionary *payload = @{
-                        kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeVoiceEventRegistered
-                    };
-                    [self sendEventWithName:kTwilioVoiceReactNativeScopeVoice body:payload];
-                    
-                    [self resolvePromise:resolver value:[NSNull null]];
-                }
-            }];
+            [self registerWithAccessToken:accessToken
+                          deviceTokenData:deviceTokenData
+                                 resolver:resolver];
         } else {
             self.registrationInProgress = NO;
             [self rejectPromiseWithName:resolver
                 name:kTwilioVoiceReactNativeErrorCodeInvalidStateError
                 message:@"Failed to initialize PushKit device token"
             ];
+        }
+    }];
+}
+
+- (void)registerWithAccessToken:(NSString *)accessToken
+                 deviceTokenData:(NSData *)deviceTokenData
+                        resolver:(RCTPromiseResolveBlock)resolver {
+    self.registrationInProgress = YES;
+    NSUInteger registrationDeviceTokenGeneration = self.deviceTokenGeneration;
+
+    [TwilioVoiceSDK registerWithAccessToken:accessToken
+                                deviceToken:deviceTokenData
+                                 completion:^(NSError *error) {
+        BOOL staleRegistration =
+            registrationDeviceTokenGeneration != self.deviceTokenGeneration ||
+            self.deviceTokenData == nil ||
+            ![self.deviceTokenData isEqualToData:deviceTokenData];
+        self.registrationInProgress = NO;
+
+        if (staleRegistration) {
+            self.accessToken = accessToken;
+
+            NSString *errorMessage = @"PushKit device token changed or was invalidated while Twilio registration was in progress";
+            NSLog(@"[TwilioVoiceReactNative] %@; ignoring stale registration result.", errorMessage);
+            [self sendEventWithName:kTwilioVoiceReactNativeScopeVoice
+                               body:@{kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeVoiceEventUnregistered}];
+
+            if (self.deviceTokenData != nil && [accessToken length] > 0) {
+                [self registerWithAccessToken:accessToken
+                              deviceTokenData:self.deviceTokenData
+                                     resolver:resolver];
+            } else if (resolver) {
+                [self rejectPromiseWithName:resolver
+                                       name:kTwilioVoiceReactNativeErrorCodeInvalidStateError
+                                    message:errorMessage];
+            }
+            return;
+        }
+
+        if (error) {
+            NSString *errorMessage = [error localizedDescription];
+            NSNumber *errorCode = @(error.code);
+
+            NSDictionary *payload = @{
+                kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeVoiceEventError,
+                kTwilioVoiceReactNativeVoiceErrorKeyError: @{
+                    kTwilioVoiceReactNativeVoiceErrorKeyCode: errorCode,
+                    kTwilioVoiceReactNativeVoiceErrorKeyMessage: errorMessage
+                }
+            };
+            [self sendEventWithName:kTwilioVoiceReactNativeScopeVoice body:payload];
+
+            if (resolver) {
+                [self rejectPromiseWithCode:resolver code:errorCode message:errorMessage];
+            }
+        } else {
+            self.accessToken = accessToken;
+
+            NSDictionary *payload = @{
+                kTwilioVoiceReactNativeVoiceEventType: kTwilioVoiceReactNativeVoiceEventRegistered
+            };
+            [self sendEventWithName:kTwilioVoiceReactNativeScopeVoice body:payload];
+
+            if (resolver) {
+                [self resolvePromise:resolver value:[NSNull null]];
+            }
         }
     }];
 }
@@ -643,6 +908,10 @@ RCT_EXPORT_METHOD(voice_unregister:(NSString *)accessToken
         return;
     }
 
+    // Disable automatic token refresh as soon as an explicit unregister begins.
+    // A failed unregister must not allow a later PushKit update to re-register
+    // the user with the cached access token.
+    self.accessToken = nil;
     self.registrationInProgress = YES;
 
     [self asyncPushRegistryInitialization:kPushRegistryDeviceTokenRetryTimeout
@@ -704,6 +973,72 @@ RCT_EXPORT_METHOD(voice_connect_ios:(NSString *)accessToken
                        iceServers:iceServers
                iceTransportPolicy:iceTransportPolicy
                          resolver:resolver];
+}
+
+RCT_EXPORT_METHOD(voice_setIceServers:(NSArray *)iceServers
+                  iceTransportPolicy:(NSString *)iceTransportPolicy
+                  resolver:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)rejecter)
+{
+    self.iceServers = iceServers;
+    self.iceTransportPolicy = iceTransportPolicy;
+    [self resolvePromise:resolver value:[NSNull null]];
+}
+
+RCT_EXPORT_METHOD(voice_setIceConfiguration:(NSDictionary *)configuration
+                  resolver:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)rejecter)
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSError *error = nil;
+        if ([self applyIceConfiguration:configuration persist:YES error:&error]) {
+            [self resolvePromise:resolver value:[NSNull null]];
+        } else {
+            rejecter(@"ice_configuration_failed", error.localizedDescription, error);
+        }
+    });
+}
+
+RCT_EXPORT_METHOD(voice_getIceConfigurationState:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)rejecter)
+{
+    NSNumber *now = @([[NSDate date] timeIntervalSince1970] * 1000.0);
+    BOOL isValid = self.iceServers.count > 0 && self.iceExpiresAt.doubleValue > now.doubleValue;
+    if (!isValid && self.iceServers.count > 0) {
+        self.iceServers = nil;
+        self.iceGenerationId = nil;
+        self.iceExpiresAt = nil;
+        self.iceApplicationStatus = @"none";
+        [self clearPersistedIceConfiguration:nil];
+    }
+    [self resolvePromise:resolver value:@{
+        @"generationId": self.iceGenerationId ?: [NSNull null],
+        @"serverCount": @(self.iceServers.count),
+        @"expiresAt": self.iceExpiresAt ?: [NSNull null],
+        @"policy": @"all",
+        @"isValid": @(isValid),
+        @"status": self.iceApplicationStatus ?: @"none",
+        @"attemptedAt": self.iceAttemptedAt ?: [NSNull null],
+        @"appliedAt": self.iceAppliedAt ?: [NSNull null],
+        @"errorCode": self.iceApplicationErrorCode ?: [NSNull null],
+    }];
+}
+
+RCT_EXPORT_METHOD(voice_clearIceConfiguration:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)rejecter)
+{
+    self.iceServers = nil;
+    self.iceTransportPolicy = nil;
+    self.iceGenerationId = nil;
+    self.iceExpiresAt = nil;
+    self.iceApplicationStatus = @"none";
+    self.iceApplicationErrorCode = nil;
+    NSError *error = nil;
+    if ([self clearPersistedIceConfiguration:&error]) {
+        [self resolvePromise:resolver value:[NSNull null]];
+    } else {
+        rejecter(@"ice_configuration_clear_failed", error.localizedDescription, error);
+    }
 }
 
 RCT_EXPORT_METHOD(voice_getCalls:(RCTPromiseResolveBlock)resolver
@@ -1203,9 +1538,9 @@ RCT_EXPORT_METHOD(cancelledCallInvite_getTo:(NSString *)uuid
 }
 
 - (NSString *)warningNameWithNumber:(NSNumber *)warning {
-    if ([warning intValue] < 0 || [warning intValue] > 4) {
+    if ([warning intValue] < 0) {
         NSLog(@"Warning number out of TVOCallQualityWarning range");
-        return @"undefined";
+        return [NSString stringWithFormat:@"unknown-quality-warning:%@", warning];
     }
     
     TVOCallQualityWarning warningValue = [warning intValue];
@@ -1215,13 +1550,15 @@ RCT_EXPORT_METHOD(cancelledCallInvite_getTo:(NSString *)uuid
         case TVOCallQualityWarningHighJitter:
             return @"high-jitter";
         case TVOCallQualityWarningHighPacketsLostFraction:
-            return @"high-packets-lost-fraction";
+            return @"high-packet-loss";
         case TVOCallQualityWarningLowMos:
             return @"low-mos";
         case TVOCallQualityWarningConstantAudioInputLevel:
             return @"constant-audio-input-level";
+        case TVOCallQualityWarningConstantAudioOutputLevel:
+            return @"constant-audio-output-level";
         default:
-            return @"undefined";
+            return [NSString stringWithFormat:@"unknown-quality-warning:%@", warning];
     }
 }
 

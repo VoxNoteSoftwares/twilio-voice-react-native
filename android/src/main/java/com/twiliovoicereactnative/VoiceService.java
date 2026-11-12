@@ -269,9 +269,19 @@ public class VoiceService extends Service {
       .enableDscp(true)
       .callMessageListener(new CallMessageListenerProxy());
 
-    final IceOptions iceOptions = callRecord.getIceOptions();
-    if (iceOptions != null) {
-      acceptOptionsBuilder.iceOptions(iceOptions);
+    // Per-accept ICE options (CallInvite.accept) take precedence; otherwise fall back to the
+    // ICE configuration persisted by VoxNote's IceConfigurationStore (natively accepted calls).
+    final IceOptions perCallIceOptions = callRecord.getIceOptions();
+    if (perCallIceOptions != null) {
+      acceptOptionsBuilder.iceOptions(perCallIceOptions);
+    } else {
+      final IceOptions storedIceOptions = IceConfigurationStore.getValidIceOptions(VoiceService.this);
+      if (storedIceOptions != null) {
+        acceptOptionsBuilder.iceOptions(storedIceOptions);
+        callRecord.setIceGenerationId(
+          IceConfigurationStore.getValidGenerationId(VoiceService.this)
+        );
+      }
     }
 
     AcceptOptions acceptOptions = acceptOptionsBuilder.build();

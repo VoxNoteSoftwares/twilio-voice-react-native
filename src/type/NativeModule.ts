@@ -108,6 +108,36 @@ export interface TwilioVoiceReactNative extends NativeModulesStatic {
     iceTransportPolicy: IceTransportPolicy | undefined
   ): NativePromise<NativeCallInfo>;
   voice_initializePushRegistry(): NativePromise<void>;
+  voice_setIceServers(
+    iceServers: Array<{ serverUrl?: string; username?: string; password?: string }>,
+    iceTransportPolicy?: string
+  ): NativePromise<void>;
+  voice_setIceConfiguration(configuration: {
+    generationId: string;
+    iceServers: Array<{ serverUrl?: string; username?: string; password?: string }>;
+    iceTransportPolicy?: undefined;
+    expiresAt: number;
+  }): NativePromise<void>;
+  voice_getIceConfigurationState(): NativePromise<{
+    generationId: string | null;
+    serverCount: number;
+    expiresAt: number | null;
+    policy: 'all';
+    isValid: boolean;
+    status: 'none' | 'pending' | 'applied' | 'failed' | 'unsupported';
+    attemptedAt: number | null;
+    appliedAt: number | null;
+    errorCode: string | number | null;
+  }>;
+  voice_clearIceConfiguration(): NativePromise<void>;
+  voice_setCallAudioOwnership(owned: boolean): NativePromise<void>;
+  voice_getAudioDeviceState(): NativePromise<{
+    enabled: boolean;
+    category: string;
+    mode: string;
+    isOtherAudioPlaying: boolean;
+    secondaryAudioShouldBeSilencedHint: boolean;
+  }>;
   voice_setCallKitConfiguration(
     configuration: Record<string, any>
   ): NativePromise<void>;

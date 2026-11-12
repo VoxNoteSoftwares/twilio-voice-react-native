@@ -1,6 +1,13 @@
 package com.twiliovoicereactnative;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.media.AudioManager;
+import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 
 import com.twilio.audioswitch.AudioDevice;
 import com.twilio.audioswitch.AudioSwitch;
@@ -139,6 +146,76 @@ class AudioSwitchManager {
   public AudioSwitchManager(Context context) {
     audioDevices = new HashMap<>();
     audioSwitch = new AudioSwitch(context);
+    this.context = context.getApplicationContext();
+    registerForeignScoGuard();
+  }
+
+  private final Context context;
+  private final Handler mainHandler = new Handler(Looper.getMainLooper());
+  private boolean scoResetPending = false;
+
+  /**
+   * Guard against AudioSwitch adopting a Bluetooth SCO link it did not open
+   * (twilio-voice-react-native#711).
+   *
+   * AudioSwitch's BluetoothHeadsetManager runs for the whole process. When another app (or a
+   * native cellular call) opens SCO on a paired headset, it can latch onto that link, enter
+   * AudioActivated and then re-grab SCO on every disconnect: the headset flaps between SCO and
+   * A2DP, media playback is blocked and the mic stays held until the process is killed.
+   * deactivate() only schedules an async job that loses that race; stop() unregisters the
+   * receiver driving the re-grab loop. So when SCO connects while there is provably no call,
+   * restart AudioSwitch once.
+   */
+  private void registerForeignScoGuard() {
+    final BroadcastReceiver receiver = new BroadcastReceiver() {
+      @Override
+      public void onReceive(Context ctx, Intent intent) {
+        final int state = intent.getIntExtra(AudioManager.EXTRA_SCO_AUDIO_STATE,
+          AudioManager.SCO_AUDIO_STATE_ERROR);
+        if (AudioManager.SCO_AUDIO_STATE_CONNECTED == state && isProvablyIdle()) {
+          resetAfterForeignSco();
+        }
+      }
+    };
+    final IntentFilter filter = new IntentFilter(AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED);
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
+      } else {
+        context.registerReceiver(receiver, filter);
+      }
+    } catch (Exception e) {
+      logger.warning(e, "Could not register the Bluetooth SCO guard");
+    }
+  }
+
+  private boolean isProvablyIdle() {
+    if (!VoiceApplicationProxy.getCallRecordDatabase().getCollection().isEmpty()) {
+      return false;
+    }
+    final AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+    if (null == audioManager) {
+      return false;
+    }
+    final int mode = audioManager.getMode();
+    return AudioManager.MODE_IN_CALL != mode
+      && AudioManager.MODE_IN_COMMUNICATION != mode
+      && AudioManager.MODE_RINGTONE != mode;
+  }
+
+  private void resetAfterForeignSco() {
+    if (scoResetPending) {
+      return;
+    }
+    scoResetPending = true;
+    logger.warning("Bluetooth SCO connected with no active call; restarting AudioSwitch (#711)");
+    mainHandler.post(() -> {
+      audioSwitch.stop();
+      mainHandler.postDelayed(() -> {
+        scoResetPending = false;
+        start();
+      }, 500);
+    });
   }
 
   public void start() {

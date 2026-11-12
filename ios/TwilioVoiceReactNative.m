@@ -971,6 +971,17 @@ RCT_EXPORT_METHOD(voice_connect_ios:(NSString *)accessToken
                   resolver:(RCTPromiseResolveBlock)resolver
                   rejecter:(RCTPromiseRejectBlock)rejecter)
 {
+    // VoxNote: one outbound call start at a time. A second connect while a
+    // CallKit start transaction is still pending is rejected, as before 1.8.
+    @synchronized (self.callPromiseResolvers) {
+        if (self.callPromiseResolvers.count > 0) {
+            [self rejectPromiseWithName:resolver
+                                   name:kTwilioVoiceReactNativeErrorCodeInvalidStateError
+                                message:@"Another outbound call is already being started"];
+            return;
+        }
+    }
+
     // The resolver is handed over rather than assigned afterwards: the CallKit
     // transaction is asynchronous, so its completion block could otherwise run
     // before the assignment, find no resolver and leave this promise pending

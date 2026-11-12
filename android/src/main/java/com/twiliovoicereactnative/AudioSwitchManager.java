@@ -147,10 +147,12 @@ class AudioSwitchManager {
     audioDevices = new HashMap<>();
     audioSwitch = new AudioSwitch(context);
     this.context = context.getApplicationContext();
+    this.proximityManager = new ProximityManager(this.context);
     registerForeignScoGuard();
   }
 
   private final Context context;
+  private final ProximityManager proximityManager;
   private final Handler mainHandler = new Handler(Looper.getMainLooper());
   private boolean scoResetPending = false;
 
@@ -189,6 +191,11 @@ class AudioSwitchManager {
     }
   }
 
+  /** Called when the set of connected calls changes (screen-off-near-ear during calls). */
+  public void onCallActiveChanged(final boolean active) {
+    proximityManager.onCallActive(active);
+  }
+
   private boolean isProvablyIdle() {
     if (!VoiceApplicationProxy.getCallRecordDatabase().getCollection().isEmpty()) {
       return false;
@@ -221,6 +228,8 @@ class AudioSwitchManager {
   public void start() {
     audioSwitch.start((devices, selectedDevice) -> {
       updateAudioDevices(devices, selectedDevice);
+      proximityManager.onEarpieceSelected(
+        null == selectedDevice || selectedDevice instanceof AudioDevice.Earpiece);
 
       if (this.listener != null) {
         this.listener.apply(audioDevices, selectedAudioDeviceUuid, selectedDevice);

@@ -112,6 +112,7 @@ class CallListenerProxy implements Call.Listener {
     }
     callRecord.setCall(call);
     callRecord.setTimestamp(new Date());
+    getAudioSwitchManager().onCallActiveChanged(true);
     getMediaPlayerManager().stop(uuid);
 
     // notify JS layer
@@ -170,6 +171,8 @@ class CallListenerProxy implements Call.Listener {
 
     // find & remove call record
     CallRecord callRecord = getCallRecordDatabase().remove(new CallRecord(uuid));
+    getAudioSwitchManager().onCallActiveChanged(
+      !getCallRecordDatabase().getCollection().isEmpty());
     if (null == callRecord) {
       missingCallRecord("onDisconnected");
       return;

@@ -65,6 +65,14 @@ import java.util.UUID;
 public class VoiceService extends Service {
   private static final SDKLog logger = new SDKLog(VoiceService.class);
   public class VoiceServiceAPI extends Binder {
+    /**
+     * Deliver a notification-action intent through the bound service instead of
+     * {@code startService}, which Android 12+ refuses while the app is in the background
+     * (BackgroundServiceStartNotAllowedException, twilio-voice-react-native#587).
+     */
+    public void dispatchIntent(@NonNull final Intent intent) {
+      VoiceService.this.onStartCommand(intent, 0, 0);
+    }
     public Call connect(@NonNull ConnectOptions cxnOptions,
                         @NonNull Call.Listener listener) {
       logger.debug("connect");

@@ -118,7 +118,21 @@ public class VoiceActivityProxy {
       Intent copiedIntent = new Intent(intent);
       copiedIntent.setClass(context.getApplicationContext(), VoiceService.class);
       copiedIntent.setFlags(0);
-      context.getApplicationContext().startService(copiedIntent);
+      try {
+        context.getApplicationContext().startService(copiedIntent);
+      } catch (IllegalStateException e) {
+        // BackgroundServiceStartNotAllowedException (API 31+) extends IllegalStateException. It is
+        // thrown when onNewIntent runs while the process is still considered in the background
+        // (seen on Samsung Android 15, #587). The application keeps VoiceService bound, so hand the
+        // intent to it directly.
+        final VoiceService.VoiceServiceAPI api = VoiceApplicationProxy.getVoiceServiceApi();
+        if (null != api) {
+          logger.warning("startService refused in background, dispatching through bound service");
+          api.dispatchIntent(copiedIntent);
+        } else {
+          logger.warning(e, "Cannot deliver notification action: service not bound");
+        }
+      }
     }
   }
 

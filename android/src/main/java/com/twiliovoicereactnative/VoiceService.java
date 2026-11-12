@@ -431,6 +431,18 @@ public class VoiceService extends Service {
   }
   private void foregroundNotification(int id, Notification notification) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      // #583: on Android 14+ a microphone-only foreground service started while the app is in
+      // the background (lock screen / background answer) is denied while-in-use microphone
+      // access, so the remote side cannot hear the user. A phoneCall-typed service (allowed with
+      // MANAGE_OWN_CALLS) keeps it. Fall back to microphone-only if the host app removed the
+      // permissions or the service type from its merged manifest.
+      try {
+        startForeground(id, notification,
+          ServiceInfo.FOREGROUND_SERVICE_TYPE_PHONE_CALL | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
+        return;
+      } catch (Exception e) {
+        logger.warning(e, "phoneCall foreground service type unavailable, falling back to microphone");
+      }
       try {
         startForeground(id, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE);
       } catch (Exception e) {

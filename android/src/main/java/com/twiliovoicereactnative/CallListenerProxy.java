@@ -34,7 +34,6 @@ import static com.twiliovoicereactnative.ReactNativeArgumentsSerializer.*;
 import com.twiliovoicereactnative.CallRecordDatabase.CallRecord;
 
 import java.util.Date;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -57,7 +56,11 @@ class CallListenerProxy implements Call.Listener {
     getAudioSwitchManager().getAudioSwitch().deactivate();
 
     // find call record & remove
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().remove(new CallRecord(uuid)));
+    CallRecord callRecord = getCallRecordDatabase().remove(new CallRecord(uuid));
+    if (null == callRecord) {
+      missingCallRecord("onConnectFailure");
+      return;
+    }
 
     // take down notification
     getVoiceServiceApi().cancelActiveCallNotification(callRecord);
@@ -75,7 +78,11 @@ class CallListenerProxy implements Call.Listener {
     debug("onRinging");
 
     // find call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    CallRecord callRecord = getCallRecordDatabase().get(new CallRecord(uuid));
+    if (null == callRecord) {
+      missingCallRecord("onRinging");
+      return;
+    }
     callRecord.setCall(call);
 
     // create notification & sound
@@ -96,7 +103,11 @@ class CallListenerProxy implements Call.Listener {
     debug("onConnected");
 
     // find call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    CallRecord callRecord = getCallRecordDatabase().get(new CallRecord(uuid));
+    if (null == callRecord) {
+      missingCallRecord("onConnected");
+      return;
+    }
     callRecord.setCall(call);
     callRecord.setTimestamp(new Date());
     getMediaPlayerManager().stop();
@@ -113,7 +124,11 @@ class CallListenerProxy implements Call.Listener {
     debug("onReconnecting");
 
     // find & update call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    CallRecord callRecord = getCallRecordDatabase().get(new CallRecord(uuid));
+    if (null == callRecord) {
+      missingCallRecord("onReconnecting");
+      return;
+    }
 
     // notify JS layer
     sendJSEvent(
@@ -128,7 +143,11 @@ class CallListenerProxy implements Call.Listener {
     debug("onReconnected");
 
     // find & update call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    CallRecord callRecord = getCallRecordDatabase().get(new CallRecord(uuid));
+    if (null == callRecord) {
+      missingCallRecord("onReconnected");
+      return;
+    }
 
     // notify JS layer
     sendJSEvent(
@@ -141,13 +160,19 @@ class CallListenerProxy implements Call.Listener {
   public void onDisconnected(@NonNull Call call, @Nullable CallException callException) {
     debug("onDisconnected");
 
-    // find & remove call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().remove(new CallRecord(uuid)));
-
-    // stop audio & cancel notification
+    // stop audio first so a missing call record can never leave audio routing active
     getMediaPlayerManager().stop();
     getMediaPlayerManager().play(MediaPlayerManager.SoundTable.DISCONNECT);
     getAudioSwitchManager().getAudioSwitch().deactivate();
+
+    // find & remove call record
+    CallRecord callRecord = getCallRecordDatabase().remove(new CallRecord(uuid));
+    if (null == callRecord) {
+      missingCallRecord("onDisconnected");
+      return;
+    }
+
+    // cancel notification
     getVoiceServiceApi().cancelActiveCallNotification(callRecord);
 
     // notify JS layer
@@ -165,7 +190,11 @@ class CallListenerProxy implements Call.Listener {
     debug("onCallQualityWarningsChanged");
 
     // find call record
-    CallRecord callRecord = Objects.requireNonNull(getCallRecordDatabase().get(new CallRecord(uuid)));
+    CallRecord callRecord = getCallRecordDatabase().get(new CallRecord(uuid));
+    if (null == callRecord) {
+      missingCallRecord("onCallQualityWarningsChanged");
+      return;
+    }
 
     // notify JS layer
     sendJSEvent(
@@ -174,6 +203,16 @@ class CallListenerProxy implements Call.Listener {
         new Pair<>(JS_EVENT_KEY_CALL_INFO, serializeCall(callRecord)),
         new Pair<>(CallEventCurrentWarnings, serializeCallQualityWarnings(currentWarnings)),
         new Pair<>(CallEventPreviousWarnings, serializeCallQualityWarnings(previousWarnings))));
+  }
+
+  /**
+   * The call record can already be gone when a Call.Listener callback arrives (e.g. the call
+   * was torn down from a notification action or by the OS while the SDK was still delivering
+   * events). Throwing here crashed the app on the main looper; log and drop the event instead.
+   * See twilio/twilio-voice-react-native#581.
+   */
+  private void missingCallRecord(final String callback) {
+    logger.warning(String.format("%s: no call record for UUID:%s, ignoring", callback, uuid));
   }
 
   private void sendJSEvent(@NonNull WritableMap event) {

@@ -286,9 +286,9 @@ public class VoiceService extends Service {
     if (perCallIceOptions != null) {
       acceptOptionsBuilder.iceOptions(perCallIceOptions);
     } else {
-      final IceOptions storedIceOptions = IceConfigurationStore.getValidIceOptions(VoiceService.this);
-      if (storedIceOptions != null) {
-        acceptOptionsBuilder.iceOptions(storedIceOptions);
+      final IceOptions iceOptions = IceConfigurationStore.getValidIceOptions(VoiceService.this);
+      if (iceOptions != null) {
+        acceptOptionsBuilder.iceOptions(iceOptions);
         callRecord.setIceGenerationId(
           IceConfigurationStore.getValidGenerationId(VoiceService.this)
         );

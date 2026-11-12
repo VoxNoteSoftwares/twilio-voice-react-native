@@ -800,6 +800,42 @@ export class Voice extends EventEmitter {
   async register(token: string): Promise<void> {
     await this._expoVersionPromise;
     await settleNativePromise(NativeModule.voice_register(token));
+    this._scheduleTokenWillExpire(token);
+  }
+
+  /**
+   * Timer for {@link (Voice:namespace).Event.TokenWillExpire}.
+   * @internal
+   */
+  private _tokenWillExpireTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * The native Voice SDKs do not expose a token-expiry event, so the SDK reads
+   * the access token's `exp` claim and emits `tokenWillExpire` shortly before
+   * it expires. Registration lasts as long as the token, so refresh the token
+   * and call `register()` again when it fires.
+   * See twilio/twilio-voice-react-native#597.
+   * @internal
+   */
+  private _scheduleTokenWillExpire(token: string) {
+    if (this._tokenWillExpireTimer) {
+      clearTimeout(this._tokenWillExpireTimer);
+      this._tokenWillExpireTimer = null;
+    }
+    const expiresAt = readJwtExpiry(token);
+    if (expiresAt === null) {
+      return;
+    }
+    const lifetime = expiresAt - Date.now();
+    if (lifetime <= 0) {
+      this.emit(Voice.Event.TokenWillExpire, expiresAt);
+      return;
+    }
+    const lead = Math.min(TOKEN_WILL_EXPIRE_LEAD_MS, lifetime / 2);
+    this._tokenWillExpireTimer = setTimeout(() => {
+      this._tokenWillExpireTimer = null;
+      this.emit(Voice.Event.TokenWillExpire, expiresAt);
+    }, lifetime - lead);
   }
 
   /**
@@ -812,6 +848,10 @@ export class Voice extends EventEmitter {
   async unregister(token: string): Promise<void> {
     await this._expoVersionPromise;
     await settleNativePromise(NativeModule.voice_unregister(token));
+    if (this._tokenWillExpireTimer) {
+      clearTimeout(this._tokenWillExpireTimer);
+      this._tokenWillExpireTimer = null;
+    }
   }
 
   /**
@@ -1168,6 +1208,14 @@ export namespace Voice {
      * | Voice.addListener(Unregistered)}.
      */
     'Unregistered' = 'unregistered',
+
+    /**
+     * Raised shortly (about one minute) before the access token passed to
+     * `register()` expires. The listener receives the expiry time in
+     * milliseconds since the epoch. Fetch a new token and call `register()`
+     * again. See twilio/twilio-voice-react-native#597.
+     */
+    'TokenWillExpire' = 'tokenWillExpire',
   }
 
   /**
@@ -1260,4 +1308,32 @@ export interface NotificationAnswerOutcome {
   errorCode: number | null;
   errorMessage: string | null;
   updatedAt: number;
+}
+
+/** How long before token expiry `tokenWillExpire` fires. @internal */
+const TOKEN_WILL_EXPIRE_LEAD_MS = 60 * 1000;
+
+/**
+ * Read the `exp` claim (seconds) of a JWT and return it in milliseconds, or
+ * null when the token cannot be decoded.
+ * @internal
+ */
+export function readJwtExpiry(token: string): number | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) {
+      return null;
+    }
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+    const decode: ((data: string) => string) | undefined = (globalThis as any)
+      .atob;
+    if (typeof decode !== 'function') {
+      return null;
+    }
+    const claims = JSON.parse(decode(padded));
+    return typeof claims.exp === 'number' ? claims.exp * 1000 : null;
+  } catch {
+    return null;
+  }
 }

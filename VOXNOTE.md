@@ -25,10 +25,14 @@ Install it in the app from a tag:
 | use a phoneCall foreground service | [#583](https://github.com/twilio/twilio-voice-react-native/issues/583) | Dead mic on calls answered from the lock screen or the background (Android 14+) |
 | turn the screen off near the ear during earpiece calls | — (VOXNOTE-397) | Proximity sensor during calls |
 | only hand the first disconnect() to the Twilio SDK | [#618](https://github.com/twilio/twilio-voice-react-native/issues/618) | UI freeze and `SSL_shutdown` errors on repeated disconnects |
+| coexist with other FCM services; null-safe cancelled invites | [#370](https://github.com/twilio/twilio-voice-react-native/issues/370) | Incoming calls lost when `@react-native-firebase/messaging` or `expo-notifications` is installed (other pushes are forwarded). NPE on a late cancel. Screen woken for every push. |
+| emit Voice.Event.TokenWillExpire | [#597](https://github.com/twilio/twilio-voice-react-native/issues/597) | New event about 1 minute before the token's `exp` |
 
 Already fixed upstream in 1.8.1, so no commit here: [#709](https://github.com/twilio/twilio-voice-react-native/issues/709) (PendingIntents shared between calls) and the NPE in `VoiceService.onStartCommand` ([#643](https://github.com/twilio/twilio-voice-react-native/issues/643), [#604](https://github.com/twilio/twilio-voice-react-native/issues/604)).
 
-Not addressed: [#597](https://github.com/twilio/twilio-voice-react-native/issues/597) (`tokenWillExpire`). The native Android and iOS Voice SDKs do not expose this event, so the app refreshes its token from the JWT's `exp`.
+Older Android issues that these commits also cover: #420 (screen visible over the lock screen → #586), #384 (crash in a release build only → ProGuard rules), #343 (permissions → `requestPermissionsOnLaunch`).
+
+Not addressed: upstream's iOS issues (#722, #715, #706, #704, #694, #668, #665, #612, #610, #696). The VoxNote iOS patch already covers part of CallKit.
 
 ## New Expo config plugin option
 

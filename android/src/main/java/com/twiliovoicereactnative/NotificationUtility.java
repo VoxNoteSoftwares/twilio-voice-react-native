@@ -321,11 +321,21 @@ class NotificationUtility {
     return voiceChannelId;
   }
 
+  /**
+   * Derive a per-call request code so the PendingIntents of overlapping calls do not replace
+   * each other (FLAG_UPDATE_CURRENT matches on request code + Intent.filterEquals, not extras).
+   * See twilio/twilio-voice-react-native#709.
+   */
+  static int getPendingIntentRequestCode(@NonNull final Intent intent) {
+    final java.io.Serializable uuid = intent.getSerializableExtra(Constants.MSG_KEY_UUID);
+    return (uuid != null) ? uuid.hashCode() : 0;
+  }
+
   private static PendingIntent constructPendingIntentForActivity(@NonNull Context context,
                                                                  @NonNull final Intent intent) {
     return PendingIntent.getActivity(
       context.getApplicationContext(),
-      0,
+      getPendingIntentRequestCode(intent),
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
   }
@@ -334,7 +344,7 @@ class NotificationUtility {
                                                                 @NonNull final Intent intent) {
     return PendingIntent.getService(
       context.getApplicationContext(),
-      0,
+      getPendingIntentRequestCode(intent),
       intent,
       PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
   }

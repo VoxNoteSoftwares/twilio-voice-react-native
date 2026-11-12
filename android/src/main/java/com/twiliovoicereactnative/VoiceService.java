@@ -49,6 +49,7 @@ import android.os.IBinder;
 import android.util.Pair;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.ServiceCompat;
 
@@ -103,37 +104,52 @@ public class VoiceService extends Service {
   public int onStartCommand(Intent intent, int flags, int startId) {
     // apparently the system can recreate the service without sending it an intent so protect
     // against that case (GH-430).
-    if (null != intent) {
-      switch (Objects.requireNonNull(intent.getAction())) {
+    if (null != intent && null != intent.getAction()) {
+      final String action = intent.getAction();
+      if (ACTION_PUSH_APP_TO_FOREGROUND.equals(action)) {
+        logger.warning("VoiceService received foreground request, ignoring");
+        return START_NOT_STICKY;
+      }
+      // A stale notification action (e.g. a call already removed from the database) must not
+      // crash the foreground service: Android would redeliver the intent and crash-loop the app.
+      // See twilio/twilio-voice-react-native#709 and #581.
+      final UUID uuid = getMessageUUID(intent);
+      final CallRecordDatabase.CallRecord record = (null != uuid) ? findCallRecord(uuid) : null;
+      if (null == record) {
+        logger.warning("No call record for action " + action + ", ignoring");
+        stopSelfIfIdle();
+        return START_NOT_STICKY;
+      }
+      switch (action) {
         case ACTION_INCOMING_CALL:
-          incomingCall(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          incomingCall(record);
           break;
         case ACTION_ACCEPT_CALL:
           try {
-            acceptCall(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+            acceptCall(record);
           } catch (SecurityException e) {
             sendPermissionsError();
             logger.warning(e, "Cannot accept call, lacking necessary permissions");
           }
           break;
         case ACTION_REJECT_CALL:
-          rejectCall(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          rejectCall(record);
           break;
         case ACTION_CANCEL_CALL:
-          cancelCall(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          cancelCall(record);
           break;
         case ACTION_CALL_DISCONNECT:
-          disconnect(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          disconnect(record);
           break;
         case ACTION_RAISE_OUTGOING_CALL_NOTIFICATION:
-          raiseOutgoingCallNotification(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          raiseOutgoingCallNotification(record);
           break;
         case ACTION_CANCEL_ACTIVE_CALL_NOTIFICATION:
-          cancelActiveCallNotification(getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+          cancelActiveCallNotification(record);
           break;
         case ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION:
           foregroundAndDeprioritizeIncomingCallNotification(
-            getCallRecord(Objects.requireNonNull(getMessageUUID(intent))));
+            record);
           break;
         case ACTION_PUSH_APP_TO_FOREGROUND:
           logger.warning("VoiceService received foreground request, ignoring");
@@ -396,6 +412,15 @@ public class VoiceService extends Service {
   }
   private static CallRecordDatabase.CallRecord getCallRecord(final UUID uuid) {
     return Objects.requireNonNull(getCallRecordDatabase().get(new CallRecordDatabase.CallRecord(uuid)));
+  }
+  @Nullable
+  private static CallRecordDatabase.CallRecord findCallRecord(@NonNull final UUID uuid) {
+    return getCallRecordDatabase().get(new CallRecordDatabase.CallRecord(uuid));
+  }
+  private void stopSelfIfIdle() {
+    if (getCallRecordDatabase().getCollection().isEmpty()) {
+      removeForegroundNotification();
+    }
   }
   private static void sendJSEvent(@NonNull String scope, @NonNull WritableMap event) {
     getJSEventEmitter().sendEvent(scope, event);

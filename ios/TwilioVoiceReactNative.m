@@ -726,6 +726,14 @@ RCT_EXPORT_METHOD(voice_getAudioDeviceState:(RCTPromiseResolveBlock)resolver
     }];
 }
 
+// Android-only (#744): CallKit reports notification answers itself, so there is
+// never a pending outcome on iOS.
+RCT_EXPORT_METHOD(voice_consumeNotificationAnswerOutcome:(RCTPromiseResolveBlock)resolver
+                  rejecter:(RCTPromiseRejectBlock)rejecter)
+{
+    [self resolvePromise:resolver value:[NSNull null]];
+}
+
 RCT_EXPORT_METHOD(voice_setCallAudioOwnership:(BOOL)owned
                   resolver:(RCTPromiseResolveBlock)resolver
                   rejecter:(RCTPromiseRejectBlock)rejecter)

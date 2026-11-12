@@ -50,6 +50,7 @@ class CallListenerProxy implements Call.Listener {
   @Override
   public void onConnectFailure(@NonNull Call call, @NonNull CallException callException) {
     debug("onConnectFailure");
+    NotificationAnswerOutcome.update(uuid, NotificationAnswerOutcome.CONNECT_FAILURE, callException);
 
     // stop sound and routing
     getMediaPlayerManager().stop(uuid);
@@ -101,6 +102,7 @@ class CallListenerProxy implements Call.Listener {
   @Override
   public void onConnected(@NonNull Call call) {
     debug("onConnected");
+    NotificationAnswerOutcome.update(uuid, NotificationAnswerOutcome.CONNECTED, null);
 
     // find call record
     CallRecord callRecord = getCallRecordDatabase().get(new CallRecord(uuid));
@@ -159,6 +161,7 @@ class CallListenerProxy implements Call.Listener {
   @Override
   public void onDisconnected(@NonNull Call call, @Nullable CallException callException) {
     debug("onDisconnected");
+    NotificationAnswerOutcome.update(uuid, NotificationAnswerOutcome.DISCONNECTED, callException);
 
     // stop audio first so a missing call record can never leave audio routing active
     getMediaPlayerManager().stop(uuid);

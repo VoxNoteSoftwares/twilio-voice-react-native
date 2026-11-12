@@ -648,6 +648,23 @@ export class Voice extends EventEmitter {
     await settleNativePromise(NativeModule.voice_clearIceConfiguration());
   }
 
+  /**
+   * Android: the outcome of the last call answered from the native incoming-call
+   * notification, returned once and then cleared. On a cold start the native layer
+   * accepts the call before JavaScript is listening, so the `accepted` /
+   * `connectFailure` events are missed; call this once the app has started to learn
+   * whether that answer connected or failed (and why). Resolves `null` when there is
+   * nothing to report, and always on iOS (CallKit reports answers itself).
+   * See twilio/twilio-voice-react-native#744.
+   */
+  async consumeNotificationAnswerOutcome(): Promise<NotificationAnswerOutcome | null> {
+    return (
+      (await settleNativePromise(
+        NativeModule.voice_consumeNotificationAnswerOutcome()
+      )) ?? null
+    );
+  }
+
   /** Synchronize VoxNote's native process-wide call-audio ownership guard. */
   async setCallAudioOwnership(owned: boolean): Promise<void> {
     await settleNativePromise(NativeModule.voice_setCallAudioOwnership(owned));
@@ -1228,4 +1245,19 @@ export namespace Voice {
      */
     export type Generic = (...args: any[]) => void;
   }
+}
+
+/**
+ * Outcome of a call answered from the Android incoming-call notification.
+ * See {@link Voice.consumeNotificationAnswerOutcome}.
+ */
+export interface NotificationAnswerOutcome {
+  uuid: string;
+  outcome: 'pending' | 'connected' | 'connectFailure' | 'disconnected';
+  callSid: string | null;
+  from: string | null;
+  customParameters: Record<string, string>;
+  errorCode: number | null;
+  errorMessage: string | null;
+  updatedAt: number;
 }

@@ -402,6 +402,12 @@ public class TwilioVoiceReactNativeModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
+  public void voice_consumeNotificationAnswerOutcome(Promise promise) {
+    // #744: outcome of the last call answered from the native notification, consumed once.
+    new PromiseAdapter(promise).resolve(NotificationAnswerOutcome.consume());
+  }
+
+  @ReactMethod
   public void voice_getIceConfigurationState(Promise promise) {
     new PromiseAdapter(promise).resolve(
       IceConfigurationStore.getState(getReactApplicationContext())

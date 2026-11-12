@@ -131,6 +131,16 @@ export interface TwilioVoiceReactNative extends NativeModulesStatic {
   }>;
   voice_clearIceConfiguration(): NativePromise<void>;
   voice_setCallAudioOwnership(owned: boolean): NativePromise<void>;
+  voice_consumeNotificationAnswerOutcome(): NativePromise<{
+    uuid: string;
+    outcome: 'pending' | 'connected' | 'connectFailure' | 'disconnected';
+    callSid: string | null;
+    from: string | null;
+    customParameters: Record<string, string>;
+    errorCode: number | null;
+    errorMessage: string | null;
+    updatedAt: number;
+  } | null>;
   voice_getAudioDeviceState(): NativePromise<{
     enabled: boolean;
     category: string;

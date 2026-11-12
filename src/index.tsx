@@ -10,6 +10,7 @@
  * @packageDocumentation
  */
 export { Voice } from './Voice';
+export type { NotificationAnswerOutcome } from './Voice';
 export {
   AudioCodec,
   AudioCodecType,

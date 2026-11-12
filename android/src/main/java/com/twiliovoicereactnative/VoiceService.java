@@ -149,6 +149,9 @@ public class VoiceService extends Service {
       }
       case ACTION_ACCEPT_CALL:
         try {
+          // remember notification-initiated answers so JS can learn the outcome after a cold
+          // start (#744)
+          NotificationAnswerOutcome.begin(callRecord);
           acceptCall(callRecord);
         } catch (SecurityException e) {
           sendPermissionsError();

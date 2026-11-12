@@ -128,13 +128,33 @@ class CallModuleProxy {
     });
   }
 
+  /**
+   * Calls whose disconnect has already been handed to the Twilio SDK. Repeated or overlapping
+   * disconnect() calls from JS (double taps, parallel async handlers) re-entered the SDK while it
+   * was tearing the call down on the main thread, which froze the UI and was followed by
+   * SSL_shutdown errors in the signaling transport (twilio-voice-react-native#618). The SDK must
+   * still be driven from the main thread, so instead of moving the work, only the first
+   * disconnect reaches the SDK.
+   */
+  private static final java.util.Set<UUID> disconnectsInFlight =
+    java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<>());
+
+  static void onCallDisconnected(final UUID uuid) {
+    disconnectsInFlight.remove(uuid);
+  }
+
   public void disconnect(String uuid, ModuleProxy.UniversalPromise promise) {
     logger.debug(String.format(".disconnect(%s)", uuid));
 
     getCallRecord(uuid, promise, (callRecord) -> {
-      callRecord
-        .getVoiceCall()
-        .disconnect();
+      final com.twilio.voice.Call call = callRecord.getVoiceCall();
+      if (com.twilio.voice.Call.State.DISCONNECTED == call.getState()
+        || !disconnectsInFlight.add(callRecord.getUuid())) {
+        logger.debug(".disconnect() > already disconnecting, ignoring");
+        promise.resolve(null);
+        return;
+      }
+      call.disconnect();
       promise.resolve(null);
     });
   }

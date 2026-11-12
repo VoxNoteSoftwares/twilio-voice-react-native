@@ -36,6 +36,7 @@ class CallRecordDatabase  {
     private CallException callException = null;
     private Map<String, String> customParameters = null;
     private String notificationDisplayName = null;
+    private String iceGenerationId = null;
     private Direction direction = Direction.INCOMING;
     public CallRecord(final UUID uuid) {
       this.uuid = uuid;
@@ -93,6 +94,9 @@ class CallRecordDatabase  {
     public final Direction getDirection() {
       return this.direction;
     }
+    public final String getIceGenerationId() {
+      return this.iceGenerationId;
+    }
     public CallInvite getCallInvite() {
       return this.callInvite;
     }
@@ -124,6 +128,9 @@ class CallRecordDatabase  {
       this.callSid = voiceCall.getSid();
       this.voiceCall = voiceCall;
     }
+    public void setIceGenerationId(String iceGenerationId) {
+      this.iceGenerationId = iceGenerationId;
+    }
     public void setCallInviteUsedState() {
       this.callInviteState = this.callInviteState == ACTIVE
         ? USED
@@ -153,9 +160,13 @@ class CallRecordDatabase  {
 
   public void add(final CallRecord callRecord) {
     callRecordList.add(callRecord);
+    CallAudioOwnershipRegistry.setOwned(
+      VoiceApplicationProxy.getApplicationContext(), true);
   }
   public void clear() {
     callRecordList.clear();
+    CallAudioOwnershipRegistry.setOwned(
+      VoiceApplicationProxy.getApplicationContext(), false);
   }
 
   public CallRecord get(final CallRecord record) {
@@ -167,7 +178,10 @@ class CallRecordDatabase  {
   }
   public CallRecord remove(final CallRecord record) {
     try {
-      return callRecordList.remove(callRecordList.indexOf(record));
+      CallRecord removed = callRecordList.remove(callRecordList.indexOf(record));
+      CallAudioOwnershipRegistry.reconcile(
+        VoiceApplicationProxy.getApplicationContext());
+      return removed;
     } catch (IndexOutOfBoundsException e) {
       return null;
     }

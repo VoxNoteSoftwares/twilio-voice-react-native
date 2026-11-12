@@ -2,6 +2,9 @@ package com.twiliovoicereactnative;
 
 import androidx.annotation.NonNull;
 
+import android.os.Handler;
+import android.os.Looper;
+
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
@@ -21,6 +24,7 @@ import com.twilio.voice.PcmuCodec;
 import com.twilio.voice.PreflightOptions;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -349,6 +353,64 @@ public class TwilioVoiceReactNativeModule extends ReactContextBaseJavaModule {
       iceOptions,
       uPromise
     );
+  }
+
+  @ReactMethod
+  public void voice_setIceConfiguration(ReadableMap configuration, Promise promise) {
+    final ModuleProxy.UniversalPromise uPromise = new PromiseAdapter(promise);
+    try {
+      String generationId = configuration.getString("generationId");
+      long expiresAt = (long) configuration.getDouble("expiresAt");
+      ReadableArray readableServers = configuration.getArray("iceServers");
+      List<Map<String, Object>> servers = new ArrayList<>();
+      if (readableServers != null) {
+        for (int index = 0; index < readableServers.size(); index++) {
+          ReadableMap readableServer = readableServers.getMap(index);
+          if (readableServer == null) continue;
+          Map<String, Object> server = new HashMap<>();
+          for (String key : Arrays.asList(
+            CommonConstants.IceServerKeyServerUrl,
+            CommonConstants.IceServerKeyUsername,
+            CommonConstants.IceServerKeyPassword
+          )) {
+            if (readableServer.hasKey(key) && !readableServer.isNull(key)) {
+              server.put(key, readableServer.getString(key));
+            }
+          }
+          servers.add(server);
+        }
+      }
+      new Handler(Looper.getMainLooper()).post(() -> {
+        try {
+          IceConfigurationStore.setConfiguration(
+            getReactApplicationContext(), generationId, servers, expiresAt
+          );
+          uPromise.resolve(null);
+        } catch (Exception error) {
+          uPromise.rejectWithName("IceConfigurationError", error.getMessage());
+        }
+      });
+    } catch (Exception error) {
+      uPromise.rejectWithName("IceConfigurationError", error.getMessage());
+    }
+  }
+
+  @ReactMethod
+  public void voice_getIceConfigurationState(Promise promise) {
+    new PromiseAdapter(promise).resolve(
+      IceConfigurationStore.getState(getReactApplicationContext())
+    );
+  }
+
+  @ReactMethod
+  public void voice_clearIceConfiguration(Promise promise) {
+    final ModuleProxy.UniversalPromise uPromise = new PromiseAdapter(promise);
+    try {
+      IceConfigurationStore.clear(getReactApplicationContext());
+      uPromise.resolve(null);
+    } catch (Exception error) {
+      uPromise.rejectWithName("IceConfigurationError", error.getMessage());
+    }
   }
 
   @ReactMethod

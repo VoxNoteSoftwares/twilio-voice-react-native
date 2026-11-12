@@ -12,6 +12,7 @@
 
 @class CXCallController;
 @class CXProvider;
+@class CXProviderConfiguration;
 @class TVOCall;
 @class TVOCallInvite;
 @class TVOCancelledCallInvite;
@@ -21,6 +22,8 @@
 FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCall;
 FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCallInvite;
 FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallInvite;
+FOUNDATION_EXPORT void VoxNoteRegisterDefaultCallingProvider(CXProvider *provider);
+FOUNDATION_EXPORT CXProvider * _Nullable VoxNoteDefaultCallingProvider(void);
 
 @interface TwilioVoiceReactNative : RCTEventEmitter <RCTBridgeModule>
 
@@ -28,14 +31,22 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
 @property (nonatomic, readonly, strong) NSMutableDictionary<NSString *, NSString *> *callConnectMap;
 @property (nonatomic, readonly, strong) NSMutableDictionary<NSString *, TVOCallInvite *> *callInviteMap;
 @property (nonatomic, readonly, strong) NSMutableDictionary<NSString *, TVOCancelledCallInvite *> *cancelledCallInviteMap;
+@property (nonatomic, readonly, strong) NSMutableDictionary<NSString *, NSString *> *callIceGenerationMap;
 
 @property (nonatomic, strong) CXProvider *callKitProvider;
 @property (nonatomic, strong) CXCallController *callKitCallController;
+@property (nonatomic, strong) CXProviderConfiguration *callKitConfiguration;
 
 @property (nonatomic, copy) NSString *accessToken;
 @property (nonatomic, copy) NSDictionary *twimlParams;
 @property (nonatomic, copy, nullable) NSArray<NSDictionary *> *iceServers;
 @property (nonatomic, copy, nullable) NSString *iceTransportPolicy;
+@property (nonatomic, copy, nullable) NSString *iceGenerationId;
+@property (nonatomic, strong, nullable) NSNumber *iceExpiresAt;
+@property (nonatomic, copy) NSString *iceApplicationStatus;
+@property (nonatomic, strong, nullable) NSNumber *iceAttemptedAt;
+@property (nonatomic, strong, nullable) NSNumber *iceAppliedAt;
+@property (nonatomic, copy, nullable) NSString *iceApplicationErrorCode;
 @property (nonatomic, strong) void(^callKitCompletionCallback)(BOOL, NSError *error);
 @property (nonatomic, strong) RCTPromiseResolveBlock callPromiseResolver;
 
@@ -49,6 +60,9 @@ FOUNDATION_EXPORT NSString * const kTwilioVoiceReactNativeEventKeyCancelledCallI
 @property (nonatomic, strong) AVAudioPlayer *ringbackPlayer;
 
 + (TVODefaultAudioDevice *)twilioAudioDevice;
+
+- (void)voxnoteSetCallAudioOwned:(BOOL)owned;
+- (void)voxnoteRefreshCallAudioOwnership;
 
 - (NSString *)warningNameWithNumber:(NSNumber *)warning;
 - (NSMutableArray *)callQualityWarningsArrayFromSet:(NSSet<NSNumber *> *)qualityWarnings;

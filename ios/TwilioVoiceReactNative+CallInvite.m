@@ -36,7 +36,13 @@
             break;
         }
     }
-    NSAssert(uuid, @"No matching call invite");
+    if (uuid == nil) {
+        // The invite may already have been removed after CallKit rejected the
+        // incoming-call report. A later Twilio cancellation is then expected.
+        NSLog(@"Ignoring cancellation for an invite that is no longer active: %@", cancelledCallInvite.callSid);
+        [self voxnoteRefreshCallAudioOwnership];
+        return;
+    }
     self.cancelledCallInviteMap[uuid] = cancelledCallInvite;
 
     [self sendEventWithName:kTwilioVoiceReactNativeScopeCallInvite
@@ -49,6 +55,7 @@
                            kTwilioVoiceReactNativeVoiceErrorKeyMessage: [error localizedDescription]}}];
     
     [self.callInviteMap removeObjectForKey:uuid];
+    [self voxnoteRefreshCallAudioOwnership];
     
     [self endCallWithUuid:[[NSUUID alloc] initWithUUIDString:uuid]];
 }

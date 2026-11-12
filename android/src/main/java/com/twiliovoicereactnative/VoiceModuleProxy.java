@@ -47,6 +47,7 @@ class VoiceModuleProxy {
     ModuleProxy.UniversalPromise promise
   ) {
     logger.debug(".connect()");
+    CallAudioOwnershipRegistry.setOwned(reactApplicationContext, true);
 
     this.mainHandler.post(() -> {
       logger.debug(".connect() > runnable");
@@ -91,6 +92,7 @@ class VoiceModuleProxy {
         final WritableMap jsCall = ReactNativeArgumentsSerializer.serializeCall(callRecord);
         promise.resolve(jsCall);
       } catch (SecurityException e) {
+        CallAudioOwnershipRegistry.reconcile(reactApplicationContext);
         promise.rejectWithCode(31401, e.getMessage());
       }
     });

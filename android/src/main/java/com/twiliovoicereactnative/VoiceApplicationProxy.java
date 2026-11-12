@@ -65,6 +65,10 @@ public class VoiceApplicationProxy {
   }
   public void onCreate() {
     logger.debug("onCreate(..) invoked");
+    // Load encrypted ICE configuration before the incoming-call service can
+    // accept a notification action, without waiting for React Native startup.
+    IceConfigurationStore.initialize(context);
+    CallAudioOwnershipRegistry.reconcile(context);
     // construct JS event engine
     jsEventEmitter = new JSEventEmitter();
     // construct notification channels

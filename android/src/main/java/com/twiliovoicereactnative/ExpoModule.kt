@@ -295,6 +295,68 @@ class ExpoModule : Module() {
       )
     }
 
+    AsyncFunction("voice_setIceConfiguration") {
+      configuration: Map<String, Any?>,
+      promise: Promise ->
+
+      try {
+        val generationId = configuration["generationId"] as? String
+          ?: throw IllegalArgumentException("Missing ICE generation ID")
+        val expiresAt = (configuration["expiresAt"] as? Number)?.toLong()
+          ?: throw IllegalArgumentException("Missing ICE expiry")
+        @Suppress("UNCHECKED_CAST")
+        val servers = configuration["iceServers"] as? List<Map<*, *>>
+          ?: throw IllegalArgumentException("Missing ICE servers")
+        IceConfigurationStore.setConfiguration(
+          VoiceApplicationProxy.getApplicationContext(),
+          generationId,
+          servers,
+          expiresAt
+        )
+        PromiseAdapter(promise).resolve(null)
+      } catch (error: Exception) {
+        PromiseAdapter(promise).rejectWithName(
+          "IceConfigurationError",
+          error.message ?: "Failed to apply ICE configuration"
+        )
+      }
+    }
+
+    AsyncFunction("voice_setCallAudioOwnership") {
+      owned: Boolean,
+      promise: Promise ->
+
+      val context = VoiceApplicationProxy.getApplicationContext()
+      if (owned) {
+        CallAudioOwnershipRegistry.setOwned(context, true)
+      } else {
+        CallAudioOwnershipRegistry.reconcile(context)
+      }
+      PromiseAdapter(promise).resolve(null)
+    }
+
+    AsyncFunction("voice_getIceConfigurationState") {
+      promise: Promise ->
+
+      PromiseAdapter(promise).resolve(
+        IceConfigurationStore.getState(VoiceApplicationProxy.getApplicationContext())
+      )
+    }
+
+    AsyncFunction("voice_clearIceConfiguration") {
+      promise: Promise ->
+
+      try {
+        IceConfigurationStore.clear(VoiceApplicationProxy.getApplicationContext())
+        PromiseAdapter(promise).resolve(null)
+      } catch (error: Exception) {
+        PromiseAdapter(promise).rejectWithName(
+          "IceConfigurationError",
+          error.message ?: "Failed to clear ICE configuration"
+        )
+      }
+    }
+
     AsyncFunction("voice_getAudioDevices") {
       promise: Promise ->
 

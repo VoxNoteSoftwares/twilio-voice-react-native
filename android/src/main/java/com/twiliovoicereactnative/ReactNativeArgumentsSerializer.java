@@ -7,6 +7,7 @@ import static com.twiliovoicereactnative.CommonConstants.AudioDeviceKeyType;
 import static com.twiliovoicereactnative.CommonConstants.AudioDeviceKeyUuid;
 import static com.twiliovoicereactnative.CommonConstants.CallInfoFrom;
 import static com.twiliovoicereactnative.CommonConstants.CallInfoInitialConnectedTimestamp;
+import static com.twiliovoicereactnative.CommonConstants.CallInfoIceGenerationId;
 import static com.twiliovoicereactnative.CommonConstants.CallInfoSid;
 import static com.twiliovoicereactnative.CommonConstants.CallInfoTo;
 import static com.twiliovoicereactnative.CommonConstants.CallInfoUuid;
@@ -102,7 +103,8 @@ class ReactNativeArgumentsSerializer {
       new Pair<>(CallInviteInfoCallSid, callInvite.getCallSid()),
       new Pair<>(CallInviteInfoFrom, callInvite.getFrom()),
       new Pair<>(CallInviteInfoTo, callInvite.getTo()),
-      new Pair<>(CallInviteInfoCustomParameters, serializeCallInviteCustomParameters(callInvite)));
+      new Pair<>(CallInviteInfoCustomParameters, serializeCallInviteCustomParameters(callInvite)),
+      new Pair<>(CallInfoIceGenerationId, callRecord.getIceGenerationId()));
   }
 
   /**
@@ -164,7 +166,8 @@ class ReactNativeArgumentsSerializer {
       new Pair<>(CallInfoIsMuted, callRecord.getVoiceCall().isMuted()),
       new Pair<>(CallInfoIsOnHold, callRecord.getVoiceCall().isOnHold()),
       new Pair<>(CallInviteInfoCustomParameters, serializeCallInviteCustomParameters(callRecord.getCallInvite())),
-      new Pair<>(CallInfoInitialConnectedTimestamp, simplifiedISO8601DateTimeFormat(callRecord.getTimestamp()))
+      new Pair<>(CallInfoInitialConnectedTimestamp, simplifiedISO8601DateTimeFormat(callRecord.getTimestamp())),
+      new Pair<>(CallInfoIceGenerationId, callRecord.getIceGenerationId())
     );
     return callInfo;
   }

@@ -33,6 +33,7 @@ export enum Constants {
   'CallInfoIsOnHold' = 'isOnHold',
   'CallInfoState' = 'state',
   'CallInfoInitialConnectedTimestamp' = 'initialConnectedTimestamp',
+  'CallInfoIceGenerationId' = 'iceGenerationId',
 
   // Call States
   'CallStateConnected' = 'connected',

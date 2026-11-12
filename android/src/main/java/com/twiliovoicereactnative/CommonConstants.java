@@ -35,6 +35,7 @@ public class CommonConstants {
   public static final String CallInfoIsOnHold = "isOnHold";
   public static final String CallInfoState = "state";
   public static final String CallInfoInitialConnectedTimestamp = "initialConnectedTimestamp";
+  public static final String CallInfoIceGenerationId = "iceGenerationId";
 
   // Call States
   public static final String CallStateConnected = "connected";

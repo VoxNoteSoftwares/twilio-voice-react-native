@@ -22,7 +22,9 @@
       android:stopWithTask="false"
       android:exported="true"
       android:enabled="@bool/twiliovoicereactnative_firebasemessagingservice_enabled">
-      <intent-filter>
+      <!-- #370: priority so call invites reach this service even when the app also uses
+           @react-native-firebase/messaging or expo-notifications; other messages are forwarded -->
+      <intent-filter android:priority="10">
         <action android:name="com.google.firebase.MESSAGING_EVENT" />
       </intent-filter>
     </service>

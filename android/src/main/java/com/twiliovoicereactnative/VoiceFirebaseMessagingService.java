@@ -39,8 +39,15 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
                                       @Nullable CallException callException) {
       logger.log(String.format("onCancelledCallInvite %s", cancelledCallInvite.getCallSid()));
 
-      CallRecord callRecord = Objects.requireNonNull(
-        getCallRecordDatabase().remove(new CallRecord(cancelledCallInvite.getCallSid())));
+      // A cancel can arrive for an invite that was already answered, rejected or never seen
+      // (late/duplicate pushes); that must not crash the messaging service.
+      final CallRecord callRecord =
+        getCallRecordDatabase().remove(new CallRecord(cancelledCallInvite.getCallSid()));
+      if (null == callRecord) {
+        logger.warning(String.format("onCancelledCallInvite %s: no matching invite, ignoring",
+          cancelledCallInvite.getCallSid()));
+        return;
+      }
 
       callRecord.setCancelledCallInvite(cancelledCallInvite);
       callRecord.setCallException(callException);
@@ -51,6 +58,7 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
   @Override
   public void onNewToken(@NonNull String token) {
     logger.log("Refreshed FCM token: " + token);
+    FirebaseMessagingDelegates.forwardNewToken(this, token);
   }
 
   /**
@@ -64,13 +72,15 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
     logger.debug("Bundle data: " + remoteMessage.getData());
     logger.debug("From: " + remoteMessage.getFrom());
 
-    PowerManager pm = (PowerManager)getSystemService(POWER_SERVICE);
-    boolean isScreenOn = pm.isInteractive(); // check if screen is on
-    if (!isScreenOn) {
-      PowerManager.WakeLock wl = pm.newWakeLock(
-        PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
-        "VoiceFirebaseMessagingService:notificationLock");
-      wl.acquire(30000); //set your time in milliseconds
+    // Only wake the screen for an incoming call invite, not for every push the app receives.
+    if ("twilio.voice.call".equals(remoteMessage.getData().get("twi_message_type"))) {
+      PowerManager pm = (PowerManager)getSystemService(POWER_SERVICE);
+      if (!pm.isInteractive()) {
+        PowerManager.WakeLock wl = pm.newWakeLock(
+          PowerManager.SCREEN_DIM_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+          "VoiceFirebaseMessagingService:notificationLock");
+        wl.acquire(30000);
+      }
     }
 
     // Check if message contains a data payload.
@@ -80,9 +90,11 @@ public class VoiceFirebaseMessagingService extends FirebaseMessagingService {
         remoteMessage.getData(),
         new MessageHandler(),
         new CallMessageListenerProxy())) {
-        logger.error("The message was not a valid Twilio Voice SDK payload: " +
-          remoteMessage.getData());
+        logger.debug("Not a Twilio Voice payload, forwarding to the app's other messaging services");
+        FirebaseMessagingDelegates.forwardMessage(this, remoteMessage);
       }
+    } else {
+      FirebaseMessagingDelegates.forwardMessage(this, remoteMessage);
     }
   }
 }

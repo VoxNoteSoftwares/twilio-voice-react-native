@@ -34,15 +34,14 @@ public class VoiceActivityProxy {
   }
   public void onCreate(Bundle ignoredSavedInstanceState) {
     logger.debug("onCreate(): invoked");
-    // Ensure the microphone permission is enabled
-    if (!checkPermissions()) {
+    // Ensure the microphone permission is enabled. Requesting it here pauses the host activity
+    // for GrantPermissionsActivity while React Native is still starting, which can crash in
+    // ReactActivityDelegate.onUserLeaveHint (#670); applications can opt out with manifest
+    // meta-data and request permissions themselves.
+    if (shouldRequestPermissionsOnLaunch() && !checkPermissions()) {
       requestPermissions();
     }
-    // These flags ensure that the activity can be launched when the screen is locked.
-    Window window = context.getWindow();
-    window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
-      | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-      | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    applyLockScreenFlags(context.getIntent());
     // handle any incoming intents
     handleIntent(context.getIntent());
   }
@@ -51,7 +50,43 @@ public class VoiceActivityProxy {
   }
   public void onNewIntent(Intent intent) {
     logger.debug("onNewIntent(...): invoked");
+    applyLockScreenFlags(intent);
     handleIntent(intent);
+  }
+  /**
+   * Only show over the lock screen / turn the screen on when the activity is brought up for a
+   * call (full-screen incoming call or call notification), and never keep the screen on
+   * permanently: FLAG_KEEP_SCREEN_ON on the host activity disabled screen lock for the whole
+   * app (#586). Normal launches clear the flags again.
+   */
+  private void applyLockScreenFlags(Intent intent) {
+    final String action = (null != intent) ? intent.getAction() : null;
+    final boolean forCall = Constants.ACTION_PUSH_APP_TO_FOREGROUND.equals(action)
+      || Constants.ACTION_ACCEPT_CALL.equals(action)
+      || Constants.ACTION_FOREGROUND_AND_DEPRIORITIZE_INCOMING_CALL_NOTIFICATION.equals(action);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+      context.setShowWhenLocked(forCall);
+      context.setTurnScreenOn(forCall);
+    } else {
+      Window window = context.getWindow();
+      final int flags = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+        | WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON;
+      if (forCall) {
+        window.addFlags(flags);
+      } else {
+        window.clearFlags(flags);
+      }
+    }
+  }
+  private boolean shouldRequestPermissionsOnLaunch() {
+    try {
+      final android.content.pm.ApplicationInfo info = context.getPackageManager()
+        .getApplicationInfo(context.getPackageName(), PackageManager.GET_META_DATA);
+      return null == info.metaData
+        || info.metaData.getBoolean(Constants.REQUEST_PERMISSIONS_ON_LAUNCH_METADATA, true);
+    } catch (Exception e) {
+      return true;
+    }
   }
   private void requestPermissions() {
     List<String> permissionsRequestList = new Vector<>();

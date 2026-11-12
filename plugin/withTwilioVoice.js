@@ -601,6 +601,25 @@ function withVoiceExpoVersionMetaData(config) {
   });
 }
 
+/**
+ * `android.requestPermissionsOnLaunch: false` stops the SDK from requesting runtime
+ * permissions while the main activity is created (twilio-voice-react-native#670).
+ */
+const ANDROID_REQUEST_PERMISSIONS_ON_LAUNCH_METADATA =
+  'com.twilio.voice.request_permissions_on_launch';
+
+function withVoicePermissionsOnLaunchMetaData(config, { android = {} }) {
+  if (android.requestPermissionsOnLaunch !== false) return config;
+  return withAndroidManifest(config, (cfg) => {
+    AndroidConfig.Manifest.addMetaDataItemToMainApplication(
+      AndroidConfig.Manifest.getMainApplicationOrThrow(cfg.modResults),
+      ANDROID_REQUEST_PERMISSIONS_ON_LAUNCH_METADATA,
+      'false'
+    );
+    return cfg;
+  });
+}
+
 /* ------------------------------------------------------------------ ios */
 
 function withVoiceInfoPlist(config, { microphoneUsageDescription }) {
@@ -676,6 +695,7 @@ const withTwilioVoice = (config, props = {}) => {
   config = withVoiceMainApplication(config);
   config = withVoiceMainActivity(config);
   config = withVoiceExpoVersionMetaData(config);
+  config = withVoicePermissionsOnLaunchMetaData(config, opts);
   config = withVoiceInfoPlist(config, opts);
   config = withVoiceEntitlements(config, opts);
   return config;

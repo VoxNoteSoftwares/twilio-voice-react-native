@@ -31,4 +31,12 @@ class Constants {
    * the incoming-call path, which runs before any JavaScript.
    */
   public static final String EXPO_VERSION_METADATA = "com.twilio.voice.expo_version";
+  /**
+   * Manifest meta-data (boolean, default true). When false, {@link VoiceActivityProxy} does not
+   * request runtime permissions while the host activity is being created; the application is
+   * expected to request RECORD_AUDIO / BLUETOOTH_CONNECT / POST_NOTIFICATIONS itself.
+   * See twilio/twilio-voice-react-native#670.
+   */
+  public static final String REQUEST_PERMISSIONS_ON_LAUNCH_METADATA =
+    "com.twilio.voice.request_permissions_on_launch";
 }

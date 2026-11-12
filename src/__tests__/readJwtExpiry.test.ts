@@ -1,4 +1,6 @@
 import { readJwtExpiry } from '../Voice';
+/* eslint-env node */
+jest.mock('../common');
 
 function jwt(claims: object): string {
   const encode = (value: object) =>
@@ -6,14 +8,14 @@ function jwt(claims: object): string {
       .toString('base64')
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
-      .replace(/=+$/, '');
+      .replace(/[=]+$/, '');
   return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode(claims)}.signature`;
 }
 
 describe('readJwtExpiry', () => {
   beforeAll(() => {
-    if (typeof (globalThis as any).atob !== 'function') {
-      (globalThis as any).atob = (data: string) =>
+    if (typeof (global as any).atob !== 'function') {
+      (global as any).atob = (data: string) =>
         Buffer.from(data, 'base64').toString('binary');
     }
   });

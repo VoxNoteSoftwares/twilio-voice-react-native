@@ -17,6 +17,7 @@ enum QualityWarning
 |  Member | Value | Description |
 |  --- | --- | --- |
 |  ConstantAudioInputLevel | <code>&quot;constant-audio-input-level&quot;</code> | Raised when the call detects constant audio input, such as silence. |
+|  ConstantAudioOutputLevel | <code>&quot;constant-audio-output-level&quot;</code> | Raised when the call detects constant audio output. |
 |  HighJitter | <code>&quot;high-jitter&quot;</code> | Raised when the network encounters high jitter. |
 |  HighPacketLoss | <code>&quot;high-packet-loss&quot;</code> | Raised when the network encounters high packet loss. |
 |  HighRtt | <code>&quot;high-rtt&quot;</code> | Raised when the network encounters high packet round-trip-time. |

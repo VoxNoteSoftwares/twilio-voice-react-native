@@ -58,6 +58,51 @@ export interface TwilioVoiceReactNative extends NativeModulesStatic {
     voice_connect_android(token: string, twimlParams: Record<string, any>, notificationDisplayName: string | undefined, iceServers: IceServer[] | undefined, iceTransportPolicy: IceTransportPolicy | undefined): NativePromise<NativeCallInfo>;
     voice_connect_ios(token: string, twimlParams: Record<string, any>, contactHandle: string, iceServers: IceServer[] | undefined, iceTransportPolicy: IceTransportPolicy | undefined): NativePromise<NativeCallInfo>;
     voice_initializePushRegistry(): NativePromise<void>;
+    voice_setIceServers(iceServers: Array<{
+        serverUrl?: string;
+        username?: string;
+        password?: string;
+    }>, iceTransportPolicy?: string): NativePromise<void>;
+    voice_setIceConfiguration(configuration: {
+        generationId: string;
+        iceServers: Array<{
+            serverUrl?: string;
+            username?: string;
+            password?: string;
+        }>;
+        iceTransportPolicy?: undefined;
+        expiresAt: number;
+    }): NativePromise<void>;
+    voice_getIceConfigurationState(): NativePromise<{
+        generationId: string | null;
+        serverCount: number;
+        expiresAt: number | null;
+        policy: 'all';
+        isValid: boolean;
+        status: 'none' | 'pending' | 'applied' | 'failed' | 'unsupported';
+        attemptedAt: number | null;
+        appliedAt: number | null;
+        errorCode: string | number | null;
+    }>;
+    voice_clearIceConfiguration(): NativePromise<void>;
+    voice_setCallAudioOwnership(owned: boolean): NativePromise<void>;
+    voice_consumeNotificationAnswerOutcome(): NativePromise<{
+        uuid: string;
+        outcome: 'pending' | 'connected' | 'connectFailure' | 'disconnected';
+        callSid: string | null;
+        from: string | null;
+        customParameters: Record<string, string>;
+        errorCode: number | null;
+        errorMessage: string | null;
+        updatedAt: number;
+    } | null>;
+    voice_getAudioDeviceState(): NativePromise<{
+        enabled: boolean;
+        category: string;
+        mode: string;
+        isOtherAudioPlaying: boolean;
+        secondaryAudioShouldBeSilencedHint: boolean;
+    }>;
     voice_setCallKitConfiguration(configuration: Record<string, any>): NativePromise<void>;
     voice_setExpoVersion(expoVersion: string | undefined): NativePromise<void>;
     voice_setIncomingCallContactHandleTemplate(template?: string): NativePromise<void>;

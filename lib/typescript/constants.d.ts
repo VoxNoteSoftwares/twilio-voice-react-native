@@ -21,6 +21,7 @@ export declare enum Constants {
     'CallInfoIsOnHold' = "isOnHold",
     'CallInfoState' = "state",
     'CallInfoInitialConnectedTimestamp' = "initialConnectedTimestamp",
+    'CallInfoIceGenerationId' = "iceGenerationId",
     'CallStateConnected' = "connected",
     'CallStateConnecting' = "connecting",
     'CallStateDisconnected' = "disconnected",

@@ -5,6 +5,7 @@
  * @packageDocumentation
  */
 export { Voice } from './Voice';
+export type { NotificationAnswerOutcome } from './Voice';
 export { AudioCodec, AudioCodecType, OpusAudioCodec, PCMUAudioCodec, } from './type/AudioCodec';
 export { AudioDevice } from './AudioDevice';
 export { Call } from './Call';

@@ -20,5 +20,6 @@ enum Event
 |  CallInvite | <code>&quot;callInvite&quot;</code> | Raised when there is an incoming call invite. |
 |  Error | <code>&quot;error&quot;</code> | Raised when the SDK encounters an error. |
 |  Registered | <code>&quot;registered&quot;</code> | Raised when the SDK is registered for incoming calls. |
+|  TokenWillExpire | <code>&quot;tokenWillExpire&quot;</code> | Raised shortly (about one minute) before the access token passed to <code>register()</code> expires. The listener receives the expiry time in milliseconds since the epoch. Fetch a new token and call <code>register()</code> again. See twilio/twilio-voice-react-native\#597. |
 |  Unregistered | <code>&quot;unregistered&quot;</code> | Raised when the SDK is unregistered for incoming calls. |
 

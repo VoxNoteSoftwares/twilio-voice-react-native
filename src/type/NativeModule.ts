@@ -109,12 +109,20 @@ export interface TwilioVoiceReactNative extends NativeModulesStatic {
   ): NativePromise<NativeCallInfo>;
   voice_initializePushRegistry(): NativePromise<void>;
   voice_setIceServers(
-    iceServers: Array<{ serverUrl?: string; username?: string; password?: string }>,
+    iceServers: Array<{
+      serverUrl?: string;
+      username?: string;
+      password?: string;
+    }>,
     iceTransportPolicy?: string
   ): NativePromise<void>;
   voice_setIceConfiguration(configuration: {
     generationId: string;
-    iceServers: Array<{ serverUrl?: string; username?: string; password?: string }>;
+    iceServers: Array<{
+      serverUrl?: string;
+      username?: string;
+      password?: string;
+    }>;
     iceTransportPolicy?: undefined;
     expiresAt: number;
   }): NativePromise<void>;

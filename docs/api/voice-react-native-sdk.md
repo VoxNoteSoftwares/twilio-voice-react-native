@@ -32,6 +32,7 @@ Provides access to Twilio Programmable Voice for React Native applications runni
 |  [Call](./voice-react-native-sdk.call_interface.md) | Defines strict typings for all events emitted by [Call objects](./voice-react-native-sdk.call_class.md)<!-- -->. |
 |  [CallInvite](./voice-react-native-sdk.callinvite_interface.md) | Defines strict typings for all events emitted by [CallInvite objects](./voice-react-native-sdk.callinvite_class.md)<!-- -->. |
 |  [CallMessage](./voice-react-native-sdk.callmessage_interface.md) | The constituent values of a Call Message. |
+|  [NotificationAnswerOutcome](./voice-react-native-sdk.notificationansweroutcome_interface.md) | Outcome of a call answered from the Android incoming-call notification. See . |
 |  [OutgoingCallMessage](./voice-react-native-sdk.outgoingcallmessage_interface.md) | Defines strict typings for all events emitted by [OutgoingCallMessage objects](./voice-react-native-sdk.outgoingcallmessage_class.md)<!-- -->. |
 |  [PreflightTest](./voice-react-native-sdk.preflighttest_interface.md) | Event typings for the [PreflightTest class](./voice-react-native-sdk.preflighttest_class.md)<!-- -->.<!-- -->Declaration-merged with the class so that <code>on</code> and <code>emit</code> are typed per event. Mirrors the same pattern used by <code>Call</code> and <code>CallInvite</code>. |
 |  [Voice](./voice-react-native-sdk.voice_interface.md) | Defines strict typings for all events emitted by [Voice objects](./voice-react-native-sdk.voice_class.md)<!-- -->. |

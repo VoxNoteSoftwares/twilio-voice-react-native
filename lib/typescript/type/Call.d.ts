@@ -8,6 +8,7 @@ export interface NativeCallInfo {
     customParameters?: CustomParameters;
     from?: string;
     [Constants.CallInfoInitialConnectedTimestamp]?: string;
+    iceGenerationId?: string;
     isMuted?: boolean;
     isOnHold?: boolean;
     sid?: string;

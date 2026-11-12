@@ -30,6 +30,7 @@ The constructor for this class is marked as internal. Third-party code should no
 |  [disconnect()](./voice-react-native-sdk.call_class.disconnect_method.md) |  | Disconnect this side of the call. |
 |  [getCustomParameters()](./voice-react-native-sdk.call_class.getcustomparameters_method.md) |  | Return a <code>Record</code> of custom parameters given to this call. |
 |  [getFrom()](./voice-react-native-sdk.call_class.getfrom_method.md) |  | Get the value of the <code>from</code> parameter given to this call. |
+|  [getIceGenerationId()](./voice-react-native-sdk.call_class.geticegenerationid_method.md) |  | Get the ICE configuration generation used to build this call, when known. |
 |  [getInitialConnectedTimestamp()](./voice-react-native-sdk.call_class.getinitialconnectedtimestamp_method.md) |  | Get the timestamp (milliseconds since epoch) of the call connected event. |
 |  [getSid()](./voice-react-native-sdk.call_class.getsid_method.md) |  | Get the call <code>SID</code>. |
 |  [getState()](./voice-react-native-sdk.call_class.getstate_method.md) |  | Get the state of the call object, such as [Call.State.Connected](./voice-react-native-sdk.call_namespace.state_enum.md) or [Call.State.Disconnected](./voice-react-native-sdk.call_namespace.state_enum.md)<!-- -->. |

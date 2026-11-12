@@ -208,10 +208,11 @@ export class Call extends EventEmitter {
     // Warning: (ae-forgotten-export) The symbol "NativeCallInfo" needs to be exported by the entry point index.d.ts
     //
     // @internal
-    constructor({ uuid, customParameters, from, sid, state, to, isMuted, isOnHold, initialConnectedTimestamp, }: NativeCallInfo);
+    constructor({ uuid, customParameters, from, sid, state, to, isMuted, isOnHold, initialConnectedTimestamp, iceGenerationId, }: NativeCallInfo);
     disconnect(): Promise<void>;
     getCustomParameters(): CustomParameters;
     getFrom(): string | undefined;
+    getIceGenerationId(): string | undefined;
     getInitialConnectedTimestamp(): Date | undefined;
     getSid(): string | undefined;
     getState(): Call.State;
@@ -260,6 +261,7 @@ export namespace Call {
     }
     export enum QualityWarning {
         'ConstantAudioInputLevel' = "constant-audio-input-level",
+        'ConstantAudioOutputLevel' = "constant-audio-output-level",
         'HighJitter' = "high-jitter",
         'HighPacketLoss' = "high-packet-loss",
         'HighRtt' = "high-rtt",
@@ -633,6 +635,26 @@ namespace MediaErrors {
         name: string;
         solutions: string[];
     }
+}
+
+// @public
+export interface NotificationAnswerOutcome {
+    // (undocumented)
+    callSid: string | null;
+    // (undocumented)
+    customParameters: Record<string, string>;
+    // (undocumented)
+    errorCode: number | null;
+    // (undocumented)
+    errorMessage: string | null;
+    // (undocumented)
+    from: string | null;
+    // (undocumented)
+    outcome: 'pending' | 'connected' | 'connectFailure' | 'disconnected';
+    // (undocumented)
+    updatedAt: number;
+    // (undocumented)
+    uuid: string;
 }
 
 // @public
@@ -1207,20 +1229,50 @@ export interface Voice {
 // @public
 export class Voice extends EventEmitter {
     constructor();
+    // (undocumented)
+    clearIceConfiguration(): Promise<void>;
     connect(token: string, { contactHandle, notificationDisplayName, params, iceServers, iceTransportPolicy, }?: Voice.ConnectOptions): Promise<Call>;
+    consumeNotificationAnswerOutcome(): Promise<NotificationAnswerOutcome | null>;
     getAudioDevices(): Promise<{
         audioDevices: AudioDevice[];
         selectedDevice?: AudioDevice;
     }>;
+    getAudioDeviceState(): Promise<{
+        enabled: boolean;
+        category: string;
+        mode: string;
+        isOtherAudioPlaying: boolean;
+        secondaryAudioShouldBeSilencedHint: boolean;
+    }>;
     getCallInvites(): Promise<ReadonlyMap<Uuid, CallInvite>>;
     getCalls(): Promise<ReadonlyMap<Uuid, Call>>;
     getDeviceToken(): Promise<string>;
+    // (undocumented)
+    getIceConfigurationState(): Promise<{
+        generationId: string | null;
+        serverCount: number;
+        expiresAt: number | null;
+        policy: 'all';
+        isValid: boolean;
+        status: 'none' | 'pending' | 'applied' | 'failed' | 'unsupported';
+        attemptedAt: number | null;
+        appliedAt: number | null;
+        errorCode: string | number | null;
+    }>;
     getVersion(): Promise<string>;
     handleFirebaseMessage(remoteMessage: Record<string, string>): Promise<boolean>;
     initializePushRegistry(): Promise<void>;
     register(token: string): Promise<void>;
     runPreflight(accessToken: string, options?: PreflightTest.Options): Promise<PreflightTest>;
+    setCallAudioOwnership(owned: boolean): Promise<void>;
     setCallKitConfiguration(configuration: CallKit.ConfigurationOptions): Promise<void>;
+    setIceConfiguration(configuration: {
+        generationId: string;
+        iceServers: IceServer[];
+        iceTransportPolicy?: undefined;
+        expiresAt: number;
+    }): Promise<void>;
+    setIceServers(iceServers: IceServer[], iceTransportPolicy?: string): Promise<void>;
     setIncomingCallContactHandleTemplate(template?: string): Promise<void>;
     showAvRoutePickerView(): Promise<void>;
     unregister(token: string): Promise<void>;
@@ -1240,6 +1292,7 @@ export namespace Voice {
         'CallInvite' = "callInvite",
         'Error' = "error",
         'Registered' = "registered",
+        'TokenWillExpire' = "tokenWillExpire",
         'Unregistered' = "unregistered"
     }
     export namespace Listener {

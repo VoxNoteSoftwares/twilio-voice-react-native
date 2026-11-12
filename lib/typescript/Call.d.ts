@@ -284,6 +284,8 @@ export declare class Call extends EventEmitter {
      * Initial `connected` timestamp. Milliseconds since epoch.
      */
     private _initialConnectedTimestamp?;
+    /** ICE configuration generation captured when native call options were built. */
+    private _iceGenerationId?;
     /**
      * A boolean representing if the call is currently muted.
      */
@@ -328,7 +330,7 @@ export declare class Call extends EventEmitter {
      *
      * @internal
      */
-    constructor({ uuid, customParameters, from, sid, state, to, isMuted, isOnHold, initialConnectedTimestamp, }: NativeCallInfo);
+    constructor({ uuid, customParameters, from, sid, state, to, isMuted, isOnHold, initialConnectedTimestamp, iceGenerationId, }: NativeCallInfo);
     /**
      * This intermediate native call event handler acts as a "gate", only
      * executing the actual call event handler (such as `Connected`) if this call
@@ -431,6 +433,8 @@ export declare class Call extends EventEmitter {
      *  - `undefined` if the call has not yet connected.
      */
     getInitialConnectedTimestamp(): Date | undefined;
+    /** Get the ICE configuration generation used to build this call, when known. */
+    getIceGenerationId(): string | undefined;
     /**
      * Get the call `SID`.
      * @returns

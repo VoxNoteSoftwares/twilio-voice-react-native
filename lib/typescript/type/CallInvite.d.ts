@@ -11,6 +11,7 @@ export interface NativeCallInviteInfo {
     customParameters?: CustomParameters;
     from: string;
     to: string;
+    iceGenerationId?: string;
 }
 export interface NativeCallInviteAcceptedEvent extends BaseNativeCallInviteEvent {
     type: Constants.CallInviteEventTypeValueAccepted;

@@ -612,8 +612,13 @@ export class Voice extends EventEmitter {
    * Should be called after fetching TURN credentials so that
    * incoming calls can use relay candidates.
    */
-  async setIceServers(iceServers: IceServer[], iceTransportPolicy?: string): Promise<void> {
-    await settleNativePromise(NativeModule.voice_setIceServers(iceServers, iceTransportPolicy));
+  async setIceServers(
+    iceServers: IceServer[],
+    iceTransportPolicy?: string
+  ): Promise<void> {
+    await settleNativePromise(
+      NativeModule.voice_setIceServers(iceServers, iceTransportPolicy)
+    );
   }
 
   /**
@@ -627,7 +632,9 @@ export class Voice extends EventEmitter {
     iceTransportPolicy?: undefined;
     expiresAt: number;
   }): Promise<void> {
-    await settleNativePromise(NativeModule.voice_setIceConfiguration(configuration));
+    await settleNativePromise(
+      NativeModule.voice_setIceConfiguration(configuration)
+    );
   }
 
   async getIceConfigurationState(): Promise<{
@@ -641,7 +648,9 @@ export class Voice extends EventEmitter {
     appliedAt: number | null;
     errorCode: string | number | null;
   }> {
-    return await settleNativePromise(NativeModule.voice_getIceConfigurationState());
+    return await settleNativePromise(
+      NativeModule.voice_getIceConfigurationState()
+    );
   }
 
   async clearIceConfiguration(): Promise<void> {
@@ -1326,8 +1335,7 @@ export function readJwtExpiry(token: string): number | null {
     }
     const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
     const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
-    const decode: ((data: string) => string) | undefined = (globalThis as any)
-      .atob;
+    const decode: ((data: string) => string) | undefined = (global as any).atob;
     if (typeof decode !== 'function') {
       return null;
     }

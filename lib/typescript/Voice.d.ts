@@ -279,6 +279,59 @@ export declare class Voice extends EventEmitter {
      */
     connect(token: string, { contactHandle, notificationDisplayName, params, iceServers, iceTransportPolicy, }?: Voice.ConnectOptions): Promise<Call>;
     /**
+     * Set ICE servers and transport policy for use by inbound calls.
+     * Should be called after fetching TURN credentials so that
+     * incoming calls can use relay candidates.
+     */
+    setIceServers(iceServers: IceServer[], iceTransportPolicy?: string): Promise<void>;
+    /**
+     * Persist a generation-stamped ICE configuration for inbound and outbound
+     * native call paths. The transport policy is intentionally left undefined so
+     * the Twilio/WebRTC default (`all`) remains in effect.
+     */
+    setIceConfiguration(configuration: {
+        generationId: string;
+        iceServers: IceServer[];
+        iceTransportPolicy?: undefined;
+        expiresAt: number;
+    }): Promise<void>;
+    getIceConfigurationState(): Promise<{
+        generationId: string | null;
+        serverCount: number;
+        expiresAt: number | null;
+        policy: 'all';
+        isValid: boolean;
+        status: 'none' | 'pending' | 'applied' | 'failed' | 'unsupported';
+        attemptedAt: number | null;
+        appliedAt: number | null;
+        errorCode: string | number | null;
+    }>;
+    clearIceConfiguration(): Promise<void>;
+    /**
+     * Android: the outcome of the last call answered from the native incoming-call
+     * notification, returned once and then cleared. On a cold start the native layer
+     * accepts the call before JavaScript is listening, so the `accepted` /
+     * `connectFailure` events are missed; call this once the app has started to learn
+     * whether that answer connected or failed (and why). Resolves `null` when there is
+     * nothing to report, and always on iOS (CallKit reports answers itself).
+     * See twilio/twilio-voice-react-native#744.
+     */
+    consumeNotificationAnswerOutcome(): Promise<NotificationAnswerOutcome | null>;
+    /** Synchronize VoxNote's native process-wide call-audio ownership guard. */
+    setCallAudioOwnership(owned: boolean): Promise<void>;
+    /**
+     * VoxNote: read the current audio capture state (Twilio audio unit enabled flag
+     * plus the AVAudioSession category/mode) so the app can prove whether outbound
+     * audio is actually live on a connected call. iOS only.
+     */
+    getAudioDeviceState(): Promise<{
+        enabled: boolean;
+        category: string;
+        mode: string;
+        isOtherAudioPlaying: boolean;
+        secondaryAudioShouldBeSilencedHint: boolean;
+    }>;
+    /**
      * Get the version of the native SDK. Note that this is not the version of the
      * React Native SDK, this is the version of the mobile SDK that the RN SDK is
      * utilizing.
@@ -341,6 +394,20 @@ export declare class Voice extends EventEmitter {
      *  - Resolves when the device has been registered.
      */
     register(token: string): Promise<void>;
+    /**
+     * Timer for {@link (Voice:namespace).Event.TokenWillExpire}.
+     * @internal
+     */
+    private _tokenWillExpireTimer;
+    /**
+     * The native Voice SDKs do not expose a token-expiry event, so the SDK reads
+     * the access token's `exp` claim and emits `tokenWillExpire` shortly before
+     * it expires. Registration lasts as long as the token, so refresh the token
+     * and call `register()` again when it fires.
+     * See twilio/twilio-voice-react-native#597.
+     * @internal
+     */
+    private _scheduleTokenWillExpire;
     /**
      * Unregister this device for incoming calls.
      * @param token - A Twilio Access Token.
@@ -613,7 +680,14 @@ export declare namespace Voice {
          * See {@link (Voice:interface).(addListener:5)
          * | Voice.addListener(Unregistered)}.
          */
-        'Unregistered' = "unregistered"
+        'Unregistered' = "unregistered",
+        /**
+         * Raised shortly (about one minute) before the access token passed to
+         * `register()` expires. The listener receives the expiry time in
+         * milliseconds since the epoch. Fetch a new token and call `register()`
+         * again. See twilio/twilio-voice-react-native#597.
+         */
+        'TokenWillExpire' = "tokenWillExpire"
     }
     /**
      * Listener types for all events emitted by a {@link (Voice:class)
@@ -683,3 +757,23 @@ export declare namespace Voice {
         type Generic = (...args: any[]) => void;
     }
 }
+/**
+ * Outcome of a call answered from the Android incoming-call notification.
+ * See {@link Voice.consumeNotificationAnswerOutcome}.
+ */
+export interface NotificationAnswerOutcome {
+    uuid: string;
+    outcome: 'pending' | 'connected' | 'connectFailure' | 'disconnected';
+    callSid: string | null;
+    from: string | null;
+    customParameters: Record<string, string>;
+    errorCode: number | null;
+    errorMessage: string | null;
+    updatedAt: number;
+}
+/**
+ * Read the `exp` claim (seconds) of a JWT and return it in milliseconds, or
+ * null when the token cannot be decoded.
+ * @internal
+ */
+export declare function readJwtExpiry(token: string): number | null;

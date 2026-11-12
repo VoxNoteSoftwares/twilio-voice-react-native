@@ -52,7 +52,7 @@ class CallListenerProxy implements Call.Listener {
     debug("onConnectFailure");
 
     // stop sound and routing
-    getMediaPlayerManager().stop();
+    getMediaPlayerManager().stop(uuid);
     getAudioSwitchManager().getAudioSwitch().deactivate();
 
     // find call record & remove
@@ -88,7 +88,7 @@ class CallListenerProxy implements Call.Listener {
     // create notification & sound
     callRecord.setNotificationId(NotificationUtility.createNotificationIdentifier());
     getAudioSwitchManager().getAudioSwitch().activate();
-    getMediaPlayerManager().play(MediaPlayerManager.SoundTable.RINGTONE);
+    getMediaPlayerManager().play(uuid, MediaPlayerManager.SoundTable.RINGTONE);
     getVoiceServiceApi().raiseOutgoingCallNotification(callRecord);
 
     // notify JS layer
@@ -110,7 +110,7 @@ class CallListenerProxy implements Call.Listener {
     }
     callRecord.setCall(call);
     callRecord.setTimestamp(new Date());
-    getMediaPlayerManager().stop();
+    getMediaPlayerManager().stop(uuid);
 
     // notify JS layer
     sendJSEvent(
@@ -161,8 +161,8 @@ class CallListenerProxy implements Call.Listener {
     debug("onDisconnected");
 
     // stop audio first so a missing call record can never leave audio routing active
-    getMediaPlayerManager().stop();
-    getMediaPlayerManager().play(MediaPlayerManager.SoundTable.DISCONNECT);
+    getMediaPlayerManager().stop(uuid);
+    getMediaPlayerManager().play(uuid, MediaPlayerManager.SoundTable.DISCONNECT);
     getAudioSwitchManager().getAudioSwitch().deactivate();
 
     // find & remove call record
